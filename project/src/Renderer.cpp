@@ -214,7 +214,7 @@ namespace mau {
 			case PrimitiveTopology::TriangleList:
 				// Use parallel execution for triangle list
 				std::for_each(
-					std::execution::par_unseq,  // threading execution policy - threading would be slightly better using a "custom" system but for this demo it is sufficient
+					std::execution::par_unseq, // Note: depth buffer access is not atomic - potential race on overlapping triangles
 					m->GetIndices().begin(), m->GetIndices().end(),
 					[this, &m, &vertices_screenSpace](uint32_t v)
 					{
