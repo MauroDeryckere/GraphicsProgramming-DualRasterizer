@@ -17,6 +17,7 @@ bld/
 
 # Visual Studio
 .vs/
+CMakeSettings.json
 
 # Do not ignore libs
 !project/libs/**

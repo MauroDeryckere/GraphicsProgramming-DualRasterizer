@@ -1,21 +1,34 @@
 # Source files
-set(SOURCES 
+set(SOURCES
     "src/main.cpp"
-    "src/Matrix.cpp"
-	"src/pch.cpp"
-    "src/Renderer.cpp"
-    "src/Timer.cpp"
-	"src/Vector2.cpp"
-    "src/Vector3.cpp"
-    "src/Vector4.cpp"
+    "src/pch.cpp"
+
+    "src/core/Matrix.cpp"
+    "src/core/Timer.cpp"
+    "src/core/Vector2.cpp"
+    "src/core/Vector3.cpp"
+    "src/core/Vector4.cpp"
+
+    "src/rendering/Renderer.cpp"
+
+    "src/scene/Mesh.cpp"
 )
 
 # Create the executable
-add_executable(${PROJECT_NAME} ${SOURCES} "src/Effect.h" "src/Mesh.h" "src/Camera.h" "src/Vertex_In.h" "src/Texture.h" "src/BRDF.h" "src/Mesh.cpp")
+add_executable(${PROJECT_NAME} ${SOURCES})
 
-# only needed if header files are not in same directory as source files
-# target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# Include directories so headers resolve without relative paths
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/rendering
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scene
+)
 
+# Force include pch.h for all source files
+target_compile_options(${PROJECT_NAME} PRIVATE /FIpch.h)
+
+# DirectX
 find_library(DXGI_LIBRARY dxgi.lib)
 find_library(D3D11_LIBRARY d3d11.lib)
 if(DXGI_LIBRARY AND D3D11_LIBRARY)
@@ -24,23 +37,29 @@ else()
     message(FATAL_ERROR "DirectX libraries not found")
 endif()
 
-
-# Copy resources to output folder
-set(RESOURCES_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources")
-file(GLOB_RECURSE RESOURCE_FILES
-    "${RESOURCES_SOURCE_DIR}/*.jpg"
-    "${RESOURCES_SOURCE_DIR}/*.png"
-    "${RESOURCES_SOURCE_DIR}/*.obj"
-    "${RESOURCES_SOURCE_DIR}/*.fx"
+# Copy assets to output folder
+set(ASSETS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+file(GLOB_RECURSE ASSET_FILES
+    "${ASSETS_SOURCE_DIR}/*.jpg"
+    "${ASSETS_SOURCE_DIR}/*.png"
+    "${ASSETS_SOURCE_DIR}/*.obj"
 )
-set(RESOURCES_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/resources/")
-file(MAKE_DIRECTORY ${RESOURCES_OUT_DIR})
-foreach(RESOURCE ${RESOURCE_FILES})
+set(ASSETS_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/resources/")
+file(MAKE_DIRECTORY ${ASSETS_OUT_DIR})
+foreach(ASSET ${ASSET_FILES})
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy ${RESOURCE}
-    ${RESOURCES_OUT_DIR})
-endforeach(RESOURCE)
+        COMMAND ${CMAKE_COMMAND} -E copy ${ASSET}
+        ${ASSETS_OUT_DIR})
+endforeach()
 
+# Copy shaders to output folder
+set(SHADERS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/shaders")
+file(GLOB_RECURSE SHADER_FILES "${SHADERS_SOURCE_DIR}/*.fx")
+foreach(SHADER ${SHADER_FILES})
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy ${SHADER}
+        ${ASSETS_OUT_DIR})
+endforeach()
 
 # Simple Directmedia Layer
 set(SDL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/SDL2-2.30.7")
@@ -55,12 +74,11 @@ file(GLOB_RECURSE DLL_FILES
     "${SDL_DIR}/lib/x64/*.dll"
     "${SDL_DIR}/lib/x64/*.manifest"
 )
-
 foreach(DLL ${DLL_FILES})
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy ${DLL}
         $<TARGET_FILE_DIR:${PROJECT_NAME}>)
-endforeach(DLL)
+endforeach()
 
 # Simple Directmedia Layer Image
 set(SDL_IMAGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/SDL2_image-2.8.2")
@@ -75,12 +93,11 @@ file(GLOB_RECURSE DLL_FILES
     "${SDL_IMAGE_DIR}/lib/x64/*.dll"
     "${SDL_IMAGE_DIR}/lib/x64/*.manifest"
 )
-
 foreach(DLL ${DLL_FILES})
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy ${DLL}
         $<TARGET_FILE_DIR:${PROJECT_NAME}>)
-endforeach(DLL)
+endforeach()
 
 # DirectX Effects
 set(FX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/dx11effects")
@@ -96,17 +113,6 @@ set_target_properties(FX PROPERTIES
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE FX)
 
-# file(GLOB_RECURSE DLL_FILES
-#    "${FX_DIR}/lib/x64/*.dll"
-#    "${FX_DIR}/lib/x64/*.manifest"
-# )
-
-# foreach(DLL ${DLL_FILES})
-#    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-#        COMMAND ${CMAKE_COMMAND} -E copy ${DLL}
-#        $<TARGET_FILE_DIR:${PROJECT_NAME}>)
-# endforeach(DLL)
-
 # Visual Leak Detector
 if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
     add_compile_definitions(ENABLE_VLD=1)
@@ -116,19 +122,15 @@ if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
         IMPORTED_LOCATION "${VLD_DIR}/lib/x64/vld.lib"
         INTERFACE_INCLUDE_DIRECTORIES "${VLD_DIR}/include"
     )
-
     target_link_libraries(${PROJECT_NAME} PRIVATE vld)
 
-    set(DLL_SOURCE_DIR "${VLD_DIR}/lib")
-
     file(GLOB_RECURSE DLL_FILES
-        "${DLL_SOURCE_DIR}/*.dll"
-        "${DLL_SOURCE_DIR}/*.manifest"
+        "${VLD_DIR}/lib/*.dll"
+        "${VLD_DIR}/lib/*.manifest"
     )
-
     foreach(DLL ${DLL_FILES})
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy ${DLL}
             $<TARGET_FILE_DIR:${PROJECT_NAME}>)
-    endforeach(DLL)
+    endforeach()
 endif()

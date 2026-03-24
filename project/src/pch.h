@@ -1,12 +1,18 @@
 #pragma once
 
+#define NOMINMAX
+#define _USE_MATH_DEFINES
+#define _CRT_DECLARE_GLOBAL_VARIABLES_DIRECTLY
+
+#include <corecrt_math.h>
+#include <cmath>
+#include <cfloat>
+#include <cstdlib>
 #include <iostream>
 #include <vector>
 #include <algorithm>
 #include <sstream>
-#include <cstdlib>
 #include <memory>
-#define NOMINMAX  //for directx
 
 // SDL Headers
 #pragma warning(push)

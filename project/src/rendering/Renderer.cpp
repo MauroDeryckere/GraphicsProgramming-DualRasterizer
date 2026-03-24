@@ -37,27 +37,27 @@ namespace mau {
 		}
 
 		//Intialize textures
-		m_pVehicleDiffuseTexture = std::make_unique<Texture>(L"Resources/vehicle_diffuse.png", m_pDevice);
-		m_pVehicleGlossinessTexture = std::make_unique<Texture>(L"Resources/vehicle_gloss.png", m_pDevice);
-		m_pVehicleNormalTexture = std::make_unique<Texture>(L"Resources/vehicle_normal.png", m_pDevice);
-		m_pVehicleSpecularTexture = std::make_unique<Texture>(L"Resources/vehicle_specular.png", m_pDevice);
+		m_pVehicleDiffuseTexture = std::make_unique<Texture>(L"resources/vehicle_diffuse.png", m_pDevice);
+		m_pVehicleGlossinessTexture = std::make_unique<Texture>(L"resources/vehicle_gloss.png", m_pDevice);
+		m_pVehicleNormalTexture = std::make_unique<Texture>(L"resources/vehicle_normal.png", m_pDevice);
+		m_pVehicleSpecularTexture = std::make_unique<Texture>(L"resources/vehicle_specular.png", m_pDevice);
 
-		m_pFireDiffuseTexture = std::make_unique<Texture>(L"Resources/fireFX_diffuse.png", m_pDevice);
+		m_pFireDiffuseTexture = std::make_unique<Texture>(L"resources/fireFX_diffuse.png", m_pDevice);
 
 
 		//Initialize effects
-		m_pVehicleEffect = std::make_shared<PixelShadingEffect>(m_pDevice, L"Resources/PosCol3D.fx");
+		m_pVehicleEffect = std::make_shared<PixelShadingEffect>(m_pDevice, L"resources/PosCol3D.fx");
 		m_pVehicleEffect->SetDiffuseTexture(m_pVehicleDiffuseTexture.get());
 		m_pVehicleEffect->SetGlossinessTexture(m_pVehicleGlossinessTexture.get());
 		m_pVehicleEffect->SetNormalTexture(m_pVehicleNormalTexture.get());
 		m_pVehicleEffect->SetSpecularTexture(m_pVehicleSpecularTexture.get());
 
-		m_pFireEffect = std::make_shared<BaseEffect>(m_pDevice, L"Resources/PartialCoverage3D.fx");
+		m_pFireEffect = std::make_shared<BaseEffect>(m_pDevice, L"resources/PartialCoverage3D.fx");
 		m_pFireEffect->SetDiffuseTexture(m_pFireDiffuseTexture.get());
 
 		//Initialize models
-		m_Meshes.emplace_back(std::make_unique<Mesh>(m_pDevice, "Resources/vehicle.obj", m_pVehicleEffect));
-		m_Meshes.emplace_back(std::make_unique<Mesh>(m_pDevice, "Resources/fireFX.obj", m_pFireEffect));
+		m_Meshes.emplace_back(std::make_unique<Mesh>(m_pDevice, "resources/vehicle.obj", m_pVehicleEffect));
+		m_Meshes.emplace_back(std::make_unique<Mesh>(m_pDevice, "resources/fireFX.obj", m_pFireEffect));
 		m_Meshes[0]->Translate({ 0.f, 0.f, 50.f });
 		m_Meshes[1]->Translate({ 0.f, 0.f, 50.f }); // Firemesh alwasy at idx 1 for this demo since we need to check for it to disable.
 
