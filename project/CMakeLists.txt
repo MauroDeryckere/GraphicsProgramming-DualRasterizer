@@ -1,23 +1,22 @@
 # Source files
 set(SOURCES
-    "src/main.cpp"
-    "src/pch.cpp"
-
-    "src/core/Matrix.cpp"
-    "src/core/Timer.cpp"
-    "src/core/Vector2.cpp"
-    "src/core/Vector3.cpp"
-    "src/core/Vector4.cpp"
-
-    "src/rendering/Renderer.cpp"
-
-    "src/scene/Mesh.cpp"
+    src/main.cpp
+    src/pch.cpp
+    src/core/Matrix.cpp
+    src/core/Timer.cpp
+    src/core/Vector2.cpp
+    src/core/Vector3.cpp
+    src/core/Vector4.cpp
+    src/rendering/Renderer.cpp
+    src/scene/Mesh.cpp
 )
 
-# Create the executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-# Include directories so headers resolve without relative paths
+# C++20
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
+
+# Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core
@@ -25,112 +24,92 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/scene
 )
 
-# Force include pch.h for all source files
-target_compile_options(${PROJECT_NAME} PRIVATE /FIpch.h)
+# Force include pch
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /FIpch.h)
+endif()
 
 # DirectX
 find_library(DXGI_LIBRARY dxgi.lib)
 find_library(D3D11_LIBRARY d3d11.lib)
-if(DXGI_LIBRARY AND D3D11_LIBRARY)
-    target_link_libraries(${PROJECT_NAME} PRIVATE ${DXGI_LIBRARY} ${D3D11_LIBRARY} Profiler::Profiler)
-else()
+if(NOT DXGI_LIBRARY OR NOT D3D11_LIBRARY)
     message(FATAL_ERROR "DirectX libraries not found")
 endif()
-
-# Copy assets to output folder
-set(ASSETS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets")
-file(GLOB_RECURSE ASSET_FILES
-    "${ASSETS_SOURCE_DIR}/*.jpg"
-    "${ASSETS_SOURCE_DIR}/*.png"
-    "${ASSETS_SOURCE_DIR}/*.obj"
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    ${DXGI_LIBRARY}
+    ${D3D11_LIBRARY}
+    Profiler::Profiler
 )
-set(ASSETS_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/resources/")
-file(MAKE_DIRECTORY ${ASSETS_OUT_DIR})
-foreach(ASSET ${ASSET_FILES})
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${ASSET}
-        ${ASSETS_OUT_DIR})
-endforeach()
 
-# Copy shaders to output folder
-set(SHADERS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/shaders")
-file(GLOB_RECURSE SHADER_FILES "${SHADERS_SOURCE_DIR}/*.fx")
-foreach(SHADER ${SHADER_FILES})
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${SHADER}
-        ${ASSETS_OUT_DIR})
-endforeach()
+# --- Helper: copy files to output directory ---
+function(copy_files_post_build TARGET_NAME SOURCE_DIR PATTERNS)
+    foreach(PATTERN ${PATTERNS})
+        file(GLOB_RECURSE FILES "${SOURCE_DIR}/${PATTERN}")
+        foreach(FILE ${FILES})
+            add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FILE}
+                $<TARGET_FILE_DIR:${TARGET_NAME}>)
+        endforeach()
+    endforeach()
+endfunction()
 
-# Simple Directmedia Layer
+function(copy_to_resources TARGET_NAME SOURCE_DIR PATTERNS)
+    set(OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/resources")
+    file(MAKE_DIRECTORY ${OUT_DIR})
+    foreach(PATTERN ${PATTERNS})
+        file(GLOB_RECURSE FILES "${SOURCE_DIR}/${PATTERN}")
+        foreach(FILE ${FILES})
+            add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FILE} ${OUT_DIR})
+        endforeach()
+    endforeach()
+endfunction()
+
+# Copy assets and shaders to output resources/ folder
+copy_to_resources(${PROJECT_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/assets" "*.jpg;*.png;*.obj")
+copy_to_resources(${PROJECT_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/shaders" "*.fx")
+
+# --- Third-party libraries ---
+
+# SDL2
 set(SDL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/SDL2-2.30.7")
-add_library(SDL STATIC IMPORTED)
-set_target_properties(SDL PROPERTIES
+add_library(SDL2 STATIC IMPORTED)
+set_target_properties(SDL2 PROPERTIES
     IMPORTED_LOCATION "${SDL_DIR}/lib/x64/SDL2.lib"
     INTERFACE_INCLUDE_DIRECTORIES "${SDL_DIR}/include"
 )
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL)
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL2)
+copy_files_post_build(${PROJECT_NAME} "${SDL_DIR}/lib/x64" "*.dll;*.manifest")
 
-file(GLOB_RECURSE DLL_FILES
-    "${SDL_DIR}/lib/x64/*.dll"
-    "${SDL_DIR}/lib/x64/*.manifest"
-)
-foreach(DLL ${DLL_FILES})
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${DLL}
-        $<TARGET_FILE_DIR:${PROJECT_NAME}>)
-endforeach()
-
-# Simple Directmedia Layer Image
+# SDL2_image
 set(SDL_IMAGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/SDL2_image-2.8.2")
-add_library(SDL_IMAGE STATIC IMPORTED)
-set_target_properties(SDL_IMAGE PROPERTIES
+add_library(SDL2_image STATIC IMPORTED)
+set_target_properties(SDL2_image PROPERTIES
     IMPORTED_LOCATION "${SDL_IMAGE_DIR}/lib/x64/SDL2_image.lib"
     INTERFACE_INCLUDE_DIRECTORIES "${SDL_IMAGE_DIR}/include"
 )
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL_IMAGE)
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL2_image)
+copy_files_post_build(${PROJECT_NAME} "${SDL_IMAGE_DIR}/lib/x64" "*.dll;*.manifest")
 
-file(GLOB_RECURSE DLL_FILES
-    "${SDL_IMAGE_DIR}/lib/x64/*.dll"
-    "${SDL_IMAGE_DIR}/lib/x64/*.manifest"
-)
-foreach(DLL ${DLL_FILES})
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${DLL}
-        $<TARGET_FILE_DIR:${PROJECT_NAME}>)
-endforeach()
-
-# DirectX Effects
+# DirectX Effects (debug/release aware)
 set(FX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/dx11effects")
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(FX_LIBRARY "${FX_DIR}/lib/x64/dx11effects_d.lib")
-else()
-    set(FX_LIBRARY "${FX_DIR}/lib/x64/dx11effects.lib")
-endif()
-add_library(FX STATIC IMPORTED)
-set_target_properties(FX PROPERTIES
-    IMPORTED_LOCATION "${FX_LIBRARY}"
+add_library(DX11Effects STATIC IMPORTED)
+set_target_properties(DX11Effects PROPERTIES
+    IMPORTED_LOCATION "${FX_DIR}/lib/x64/dx11effects.lib"
+    IMPORTED_LOCATION_DEBUG "${FX_DIR}/lib/x64/dx11effects_d.lib"
     INTERFACE_INCLUDE_DIRECTORIES "${FX_DIR}/include"
 )
-target_link_libraries(${PROJECT_NAME} PRIVATE FX)
+target_link_libraries(${PROJECT_NAME} PRIVATE DX11Effects)
 
-# Visual Leak Detector
-if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
-    add_compile_definitions(ENABLE_VLD=1)
+# Visual Leak Detector (Debug only)
+if(WIN32)
     set(VLD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/vld")
-    add_library(vld STATIC IMPORTED)
-    set_target_properties(vld PROPERTIES
+    add_library(VLD STATIC IMPORTED)
+    set_target_properties(VLD PROPERTIES
         IMPORTED_LOCATION "${VLD_DIR}/lib/x64/vld.lib"
         INTERFACE_INCLUDE_DIRECTORIES "${VLD_DIR}/include"
     )
-    target_link_libraries(${PROJECT_NAME} PRIVATE vld)
-
-    file(GLOB_RECURSE DLL_FILES
-        "${VLD_DIR}/lib/*.dll"
-        "${VLD_DIR}/lib/*.manifest"
-    )
-    foreach(DLL ${DLL_FILES})
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy ${DLL}
-            $<TARGET_FILE_DIR:${PROJECT_NAME}>)
-    endforeach()
+    target_link_libraries(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:VLD>)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:ENABLE_VLD=1>)
+    copy_files_post_build(${PROJECT_NAME} "${VLD_DIR}/lib" "*.dll;*.manifest")
 endif()
