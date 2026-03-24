@@ -14,8 +14,6 @@ namespace mau
 		{
 			assert(std::filesystem::exists(path));
 
-			assert(std::filesystem::exists(path));
-
 			m_pSurface = IMG_Load(path.string().c_str());
 			if (!m_pSurface)
 				throw std::runtime_error("Failed to load texture from path: " + path.string());
@@ -84,8 +82,10 @@ namespace mau
 
 		ColorRGB Sample(const Vector2& uv) const
 		{
-			uint32_t const x{ static_cast<uint32_t>(uv.x * m_pSurface->w) };
-			uint32_t const y{ static_cast<uint32_t>(uv.y * m_pSurface->h) };
+			float const u{ std::clamp(uv.x, 0.f, 1.f) };
+			float const v{ std::clamp(uv.y, 0.f, 1.f) };
+			uint32_t const x{ std::min(static_cast<uint32_t>(u * m_pSurface->w), static_cast<uint32_t>(m_pSurface->w - 1)) };
+			uint32_t const y{ std::min(static_cast<uint32_t>(v * m_pSurface->h), static_cast<uint32_t>(m_pSurface->h - 1)) };
 
 			uint8_t r{};
 			uint8_t g{};

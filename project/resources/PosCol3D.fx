@@ -113,13 +113,12 @@ float Phong(float ks, float exp, float3 lightDir, float3 viewDir, float3 normal)
 }
 
 
-// Vertrex Shader
+// Vertex Shader
 VS_OUTPUT VS(VS_INPUT input)
 {
     VS_OUTPUT output = (VS_OUTPUT)0;
     output.Position = mul(float4(input.Position, 1.0f), gWorldViewProj);
     output.WorldPosition = mul(float4(input.Position, 1.0f), gWorldMatrix);
-    //output.WorldPosition = mul(float4(0.f, 0.f, 0.f, 1.0f), gWorldMatrix);
     output.TexCoord = input.TexCoord;
     
     output.Tangent = mul(normalize(input.Tangent), (float3x3) gWorldMatrix);
@@ -150,13 +149,6 @@ float4 PS(VS_OUTPUT input, SamplerState s) : SV_TARGET
                                                                             gLightDirection,
                                                                             viewDir,
                                                                             normal);
-    // soeme different returns to double check everything works correctly
-    // return float4(normalMap, 1.0F);
-    // return lambert;
-    // return specular;
-    // return float4(normal.x, normal.y, normal.z, 1.0F);
-    // return float4(observedArea, observedArea, observedArea, 1.0F);
-    
     return observedArea * lambert + specular + gAmbientColor;
 }
 
