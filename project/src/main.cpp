@@ -6,6 +6,7 @@
 
 #undef main
 #include "Renderer.h"
+#include <Profiler/ProfilerMacros.h>
 
 using namespace mau;
 
@@ -39,6 +40,8 @@ int main(int argc, char* args[])
 		return 1;
 
 	PrintSettings();
+
+	PROFILER_BEGIN_SESSION("DualRasterizer", "profiling/dual_rasterizer", 1);
 
 	const auto pTimer = std::make_unique<Timer>();
 	const auto pRenderer = std::make_unique<Renderer>(pWindow);
@@ -122,13 +125,20 @@ int main(int argc, char* args[])
 		}
 
 		//--------- Update ---------
-		pRenderer->Update(pTimer.get());
+		{
+			PROFILER_SCOPE("Update");
+			pRenderer->Update(pTimer.get());
+		}
 
 		//--------- Render ---------
-		pRenderer->Render();
+		{
+			PROFILER_SCOPE("Render");
+			pRenderer->Render();
+		}
 
 		//--------- Timer ---------
 		pTimer->Update();
+		PROFILER_TICK();
 		printTimer += pTimer->GetElapsed();
 		if (printTimer >= 1.f)
 		{
@@ -140,6 +150,8 @@ int main(int argc, char* args[])
 		}
 	}
 	pTimer->Stop();
+
+	PROFILER_END_SESSION();
 
 	ShutDown(pWindow);
 	return 0;

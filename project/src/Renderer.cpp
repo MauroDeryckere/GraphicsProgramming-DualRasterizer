@@ -5,6 +5,7 @@
 #include "BRDF.h"
 #include "Effect.h"
 #include <execution>
+#include <Profiler/ProfilerMacros.h>
 
 namespace mau {
 
@@ -155,6 +156,7 @@ namespace mau {
 
 	void Renderer::RenderDirectXHardware() const
 	{
+		PROFILER_FUNCTION();
 		if (!m_IsDirectXInitialized)
 		{
 			std::cout << RED << "DirectX not Initialized\n" << RESET;
@@ -181,6 +183,7 @@ namespace mau {
 
 	void Renderer::RenderSoftware() const
 	{
+		PROFILER_FUNCTION();
 		//Lock BackBuffer
 		SDL_LockSurface(m_pBackBuffer);
 
@@ -247,6 +250,7 @@ namespace mau {
 
 	void Renderer::VertexTransformationFunction(std::vector<Vector2>& screenSpace, Mesh* mesh) const
 	{
+		PROFILER_FUNCTION();
 		//projection stage:
 		//model -> world space -> world -> view space 
 		auto const m{ mesh->GetWorldMatrix() * m_Camera.viewMatrix * m_Camera.projectionMatrix };

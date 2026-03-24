@@ -7,6 +7,16 @@ project(DualRasterizer)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Profiler
+include(FetchContent)
+FetchContent_Declare(
+    Profiler
+    GIT_REPOSITORY https://github.com/MauroDeryckere/Profiler.git
+    GIT_TAG main
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(Profiler)
+
 add_subdirectory(project)
 
 # REDUNDANT, use this only if you want to let CMake build SDL

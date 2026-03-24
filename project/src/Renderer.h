@@ -273,7 +273,7 @@ namespace mau
 		std::unique_ptr<Texture> m_pFireDiffuseTexture{ nullptr };
 
 		//Settings
-		bool m_IsSoftwareRasterizerMode{ false };
+		bool m_IsSoftwareRasterizerMode{ true };
 		bool m_IsRotationMode{ true };
 		bool m_DisplayFireMesh{ true };
 		SamplerState m_SamplerState{ SamplerState::Point };

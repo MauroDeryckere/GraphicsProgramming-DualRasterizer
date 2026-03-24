@@ -19,7 +19,7 @@ add_executable(${PROJECT_NAME} ${SOURCES} "src/Effect.h" "src/Mesh.h" "src/Camer
 find_library(DXGI_LIBRARY dxgi.lib)
 find_library(D3D11_LIBRARY d3d11.lib)
 if(DXGI_LIBRARY AND D3D11_LIBRARY)
-    target_link_libraries(${PROJECT_NAME} PRIVATE ${DXGI_LIBRARY} ${D3D11_LIBRARY})
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${DXGI_LIBRARY} ${D3D11_LIBRARY} Profiler::Profiler)
 else()
     message(FATAL_ERROR "DirectX libraries not found")
 endif()
