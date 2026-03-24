@@ -19,10 +19,9 @@ namespace mau {
 		//Create Buffers (software rasterizer)
 		m_pFrontBuffer = SDL_GetWindowSurface(pWindow);
 		m_pBackBuffer = SDL_CreateRGBSurface(0, m_Width, m_Height, 32, 0, 0, 0, 0);
-		m_pBackBufferPixels = (uint32_t*)m_pBackBuffer->pixels;
+		m_pBackBufferPixels = static_cast<uint32_t*>(m_pBackBuffer->pixels);
 
-		m_pDepthBufferPixels = new float[m_Width * m_Height];
-		std::fill_n(m_pDepthBufferPixels, (m_Width * m_Height), FLT_MAX);
+		m_DepthBuffer.resize(m_Width * m_Height, FLT_MAX);
 
 		//Initialize DirectX pipeline
 		if (SUCCEEDED(InitializeDirectX()))
@@ -67,7 +66,6 @@ namespace mau {
 
 	Renderer::~Renderer()
 	{
-		delete[] m_pDepthBufferPixels;
 
 		// Direct X safe release macro (call release if exists)
 		SAFE_RELEASE(m_pRenderTargetView)
@@ -188,7 +186,7 @@ namespace mau {
 		//Lock BackBuffer
 		SDL_LockSurface(m_pBackBuffer);
 
-		std::fill_n(m_pDepthBufferPixels, m_Width * m_Height, FLT_MAX);
+		std::fill(m_DepthBuffer.begin(), m_DepthBuffer.end(), FLT_MAX);
 		std::fill_n(m_pBackBufferPixels, m_Width * m_Height, 0);
 
 		//clear the background
@@ -416,10 +414,10 @@ namespace mau {
 				float const interpolatedDepth{ 1.f / (weight0 * invDepth0 + weight1 * invDepth1 + weight2 * invDepth2) };
 
 				int const pixelIdx{ px + py * m_Width };
-				if (interpolatedDepth < 0.f || interpolatedDepth > 1.f || m_pDepthBufferPixels[pixelIdx] < interpolatedDepth)
+				if (interpolatedDepth < 0.f || interpolatedDepth > 1.f || m_DepthBuffer.data()[pixelIdx] < interpolatedDepth)
 					continue;
 
-				m_pDepthBufferPixels[pixelIdx] = interpolatedDepth;
+				m_DepthBuffer.data()[pixelIdx] = interpolatedDepth;
 
 				ColorRGB finalColor;
 

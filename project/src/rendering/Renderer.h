@@ -243,7 +243,7 @@ namespace mau
 		SDL_Surface* m_pBackBuffer{ nullptr };
 		uint32_t* m_pBackBufferPixels{ nullptr };
 
-		float* m_pDepthBufferPixels{ nullptr };
+		std::vector<float> m_DepthBuffer{};
 
 
 		//DirectX

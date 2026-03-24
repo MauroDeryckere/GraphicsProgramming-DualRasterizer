@@ -42,8 +42,8 @@
 #include "Timer.h"
 #include "Math.h"
 
-// Cool CMD prompt colours
-#define RESET   "\033[0m"
-#define RED     "\033[31m"
-#define GREEN   "\033[32m"
-#define YELLOW  "\033[33m"
+// Console colors
+inline constexpr char const* RESET  = "\033[0m";
+inline constexpr char const* RED    = "\033[31m";
+inline constexpr char const* GREEN  = "\033[32m";
+inline constexpr char const* YELLOW = "\033[33m";
