@@ -103,7 +103,7 @@ namespace mau
 			projectionMatrix = Matrix::CreatePerspectiveFovLH(fov, aspectRatio, nearPlane, farPlane);
 		}
 
-		void Update(Timer* pTimer)
+		void Update(const Timer* pTimer)
 		{
 			float const deltaTime{ pTimer->GetElapsed() };
 

@@ -128,7 +128,7 @@ namespace mau {
 		}
 	}
 
-	void Renderer::Update(Timer* pTimer)
+	void Renderer::Update(const Timer* pTimer)
 	{
 		m_Camera.Update(pTimer);
 
@@ -466,7 +466,7 @@ namespace mau {
 		}
 	}
 
-	ColorRGB Renderer::PixelShading(Mesh const* m, Vertex_Out const& v, Vector3 const& viewDir) const
+	ColorRGB Renderer::PixelShading(const Mesh* m, const Vertex_Out& v, const Vector3& viewDir) const
 	{
 		//Global light & other defines
 		Vector3 static constexpr LIGHT_DIRECTION{ Vector3{.577f, -.577f, .577f} };

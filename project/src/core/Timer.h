@@ -9,7 +9,7 @@ namespace mau
 	{
 	public:
 		Timer();
-		virtual ~Timer() = default;
+		~Timer() = default;
 
 		Timer(const Timer&) = delete;
 		Timer(Timer&&) noexcept = delete;

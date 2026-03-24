@@ -122,9 +122,9 @@ namespace mau
 		}
 
 		Mesh(const Mesh&) = delete;
+		Mesh(Mesh&&) noexcept = delete;
 		Mesh& operator=(const Mesh&) = delete;
-		Mesh(Mesh&&) = delete;
-		Mesh& operator=(Mesh&&) = delete;
+		Mesh& operator=(Mesh&&) noexcept = delete;
 
 	private:
 		Matrix m_WorldMatrix{};

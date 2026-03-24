@@ -27,7 +27,7 @@ namespace mau
 		Renderer& operator=(const Renderer&) = delete;
 		Renderer& operator=(Renderer&&) noexcept = delete;
 
-		void Update(Timer* pTimer);
+		void Update(const Timer* pTimer);
 		void Render() const;
 
 	#pragma region RenderSettings
@@ -307,6 +307,6 @@ namespace mau
 		void VertexTransformationFunction(std::vector<Vector2>& screenSpace, Mesh* mesh) const;
 		void RenderTriangle(Mesh* m, std::vector<Vector2> const& vertices, uint32_t startVertex, bool swapVertex) const;
 
-		[[nodiscard]] ColorRGB PixelShading(Mesh const* m, Vertex_Out const& v, Vector3 const& viewDir) const;
+		[[nodiscard]] ColorRGB PixelShading(const Mesh* m, const Vertex_Out& v, const Vector3& viewDir) const;
 	};
 }
