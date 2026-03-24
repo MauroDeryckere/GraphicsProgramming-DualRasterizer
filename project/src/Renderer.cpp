@@ -459,11 +459,10 @@ namespace mau {
 
 
 				//Update Color in Buffer
-				finalColor.MaxToOne();
-				m_pBackBufferPixels[pixelIdx] = SDL_MapRGB(m_pBackBuffer->format,
-					static_cast<uint8_t>(finalColor.r * 255),
-					static_cast<uint8_t>(finalColor.g * 255),
-					static_cast<uint8_t>(finalColor.b * 255));
+				m_pBackBufferPixels[pixelIdx] =
+					  (static_cast<uint8_t>(std::min(finalColor.r, 1.f) * 255) << 16)
+					| (static_cast<uint8_t>(std::min(finalColor.g, 1.f) * 255) << 8)
+					| (static_cast<uint8_t>(std::min(finalColor.b, 1.f) * 255));
 			}
 		}
 	}
@@ -476,27 +475,32 @@ namespace mau {
 		float static constexpr SHININESS{ 25.0f };
 		float static constexpr KD{ 7.f };
 
-		ColorRGB result{ };
+		// Early out: skip all shading if surface faces away from light
+		if (m_CurrShadingMode != ShadingMode::ObservedArea && Vector3::Dot(v.normal, -LIGHT_DIRECTION) <= 0.f)
+		{
+			return AMBIENT_COLOR;
+		}
 
 		// Normal mapping (manual 3x3 TBN transform - avoids 4x4 Matrix overhead)
-		Vector3 const biNormal = Vector3::Cross(v.normal, v.tangent);
+		Vector3 sampledNormal{ v.normal };
+		if (m_UseNormalMapping)
+		{
+			Vector3 const biNormal = Vector3::Cross(v.normal, v.tangent);
+			ColorRGB const normalColor = m_pVehicleNormalTexture->Sample(v.texcoord);
+			float const nx = normalColor.r * 2.f - 1.f;
+			float const ny = normalColor.g * 2.f - 1.f;
+			float const nz = normalColor.b * 2.f - 1.f;
 
-		ColorRGB const normalColor = m_pVehicleNormalTexture->Sample(v.texcoord);
-		float const nx = normalColor.r * 2.f - 1.f;
-		float const ny = normalColor.g * 2.f - 1.f;
-		float const nz = normalColor.b * 2.f - 1.f;
+			sampledNormal = {
+				nx * v.tangent.x + ny * biNormal.x + nz * v.normal.x,
+				nx * v.tangent.y + ny * biNormal.y + nz * v.normal.y,
+				nx * v.tangent.z + ny * biNormal.z + nz * v.normal.z
+			};
+			sampledNormal.Normalize();
+		}
 
-		Vector3 sampledNormal = {
-			nx * v.tangent.x + ny * biNormal.x + nz * v.normal.x,
-			nx * v.tangent.y + ny * biNormal.y + nz * v.normal.y,
-			nx * v.tangent.z + ny * biNormal.z + nz * v.normal.z
-		};
-		sampledNormal.Normalize();
-
-
-		//calculate observed area
-		float const observedArea{ std::clamp(m_UseNormalMapping ? Utils::CalculateObservedArea(sampledNormal,LIGHT_DIRECTION)
-																	: Utils::CalculateObservedArea(v.normal, LIGHT_DIRECTION), 0.f, 1.f) };
+		float const observedArea{ std::clamp(Utils::CalculateObservedArea(sampledNormal, LIGHT_DIRECTION), 0.f, 1.f) };
+		ColorRGB result{ };
 		switch (m_CurrShadingMode)
 		{
 		case ShadingMode::ObservedArea:
@@ -506,32 +510,18 @@ namespace mau {
 		}
 		case ShadingMode::Diffuse:
 		{
-			if (observedArea <= 0)
-			{
-				return{ colors::Black };
-			}
 			result = BRDF::Lambert(KD, m_pVehicleDiffuseTexture->Sample(v.texcoord)) * observedArea;
 			break;
 		}
 		case ShadingMode::Specular:
 		{
-			if (observedArea <= 0)
-			{
-				return{ colors::Black };
-			}
-			result = observedArea * m_pVehicleSpecularTexture->Sample(v.texcoord).r * BRDF::Phong(1.f, SHININESS * m_pVehicleGlossinessTexture->Sample(v.texcoord).r, LIGHT_DIRECTION, viewDir, m_UseNormalMapping ? sampledNormal : v.normal);
+			result = observedArea * m_pVehicleSpecularTexture->Sample(v.texcoord).r * BRDF::Phong(1.f, SHININESS * m_pVehicleGlossinessTexture->Sample(v.texcoord).r, LIGHT_DIRECTION, viewDir, sampledNormal);
 			break;
 		}
 		case ShadingMode::Combined:
 		{
-			if (observedArea <= 0)
-			{
-				return{ colors::Black };
-			}
 			auto const lambert{ BRDF::Lambert(KD, m_pVehicleDiffuseTexture->Sample(v.texcoord)) };
-			ColorRGB const phong = m_pVehicleSpecularTexture->Sample(v.texcoord).r * BRDF::Phong(1.f, SHININESS * m_pVehicleGlossinessTexture->Sample(v.texcoord).r,LIGHT_DIRECTION, viewDir, m_UseNormalMapping ? sampledNormal : v.normal);
-
-
+			ColorRGB const phong = m_pVehicleSpecularTexture->Sample(v.texcoord).r * BRDF::Phong(1.f, SHININESS * m_pVehicleGlossinessTexture->Sample(v.texcoord).r, LIGHT_DIRECTION, viewDir, sampledNormal);
 			result = observedArea * lambert + phong;
 			break;
 		}
