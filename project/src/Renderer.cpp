@@ -5,6 +5,7 @@
 #include "BRDF.h"
 #include "Effect.h"
 #include <execution>
+#include <atomic>
 #include <Profiler/ProfilerMacros.h>
 
 namespace mau {
@@ -212,10 +213,10 @@ namespace mau {
 			//convert each NDC coordinates to screen space / raster space
 			VertexTransformationFunction(vertices_screenSpace, m.get());
 
+			PROFILER_SCOPE("Rasterization");
 			switch (m->GetPrimitiveTopology())
 			{
 			case PrimitiveTopology::TriangleList:
-				// Use parallel execution for triangle list
 				std::for_each(
 					std::execution::par_unseq, // Note: depth buffer access is not atomic - potential race on overlapping triangles
 					m->GetIndices().begin(), m->GetIndices().end(),
@@ -441,13 +442,25 @@ namespace mau {
 					pixelToShade.normal = Vector3{ interpolatedW * (weight0 * n0 * invW0 + weight1 * n1 * invW1 + weight2 * n2 * invW2) }.Normalized();
 					pixelToShade.tangent = Vector3{ interpolatedW * (weight0 * t0 * invW0 + weight1 * t1 * invW1 + weight2 * t2 * invW2) }.Normalized();
 
-					finalColor = PixelShading(m, pixelToShade, viewDir);
+					{
+						static std::atomic<int> s_shadingProfileCount{ 0 };
+						auto const count = s_shadingProfileCount.fetch_add(1, std::memory_order_relaxed);
+						if (count == 0)
+						{
+							PROFILER_SCOPE("PixelShading (first call)");
+							finalColor = PixelShading(m, pixelToShade, viewDir);
+						}
+						else
+						{
+							finalColor = PixelShading(m, pixelToShade, viewDir);
+						}
+					}
 				}
 
 
 				//Update Color in Buffer
 				finalColor.MaxToOne();
-				m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
+				m_pBackBufferPixels[pixelIdx] = SDL_MapRGB(m_pBackBuffer->format,
 					static_cast<uint8_t>(finalColor.r * 255),
 					static_cast<uint8_t>(finalColor.g * 255),
 					static_cast<uint8_t>(finalColor.b * 255));
@@ -465,14 +478,20 @@ namespace mau {
 
 		ColorRGB result{ };
 
-		// Normal mapping
+		// Normal mapping (manual 3x3 TBN transform - avoids 4x4 Matrix overhead)
 		Vector3 const biNormal = Vector3::Cross(v.normal, v.tangent);
-		Matrix const tangentSpaceAxis = { v.tangent, biNormal, v.normal, Vector3::Zero };
 
 		ColorRGB const normalColor = m_pVehicleNormalTexture->Sample(v.texcoord);
-		Vector3 sampledNormal = { normalColor.r, normalColor.g, normalColor.b }; //range [0, 1]
-		sampledNormal = 2.f * sampledNormal - Vector3{ 1, 1, 1 }; //[0, 1] to [-1, 1]
-		sampledNormal = tangentSpaceAxis.TransformVector(sampledNormal).Normalized();
+		float const nx = normalColor.r * 2.f - 1.f;
+		float const ny = normalColor.g * 2.f - 1.f;
+		float const nz = normalColor.b * 2.f - 1.f;
+
+		Vector3 sampledNormal = {
+			nx * v.tangent.x + ny * biNormal.x + nz * v.normal.x,
+			nx * v.tangent.y + ny * biNormal.y + nz * v.normal.y,
+			nx * v.tangent.z + ny * biNormal.z + nz * v.normal.z
+		};
+		sampledNormal.Normalize();
 
 
 		//calculate observed area

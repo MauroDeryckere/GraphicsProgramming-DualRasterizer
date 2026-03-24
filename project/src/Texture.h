@@ -20,6 +20,18 @@ namespace mau
 
 			m_pSurfacePixels = reinterpret_cast<uint32_t*>(m_pSurface->pixels);
 
+			// Cache surface properties for fast sampling
+			m_Width = static_cast<uint32_t>(m_pSurface->w);
+			m_Height = static_cast<uint32_t>(m_pSurface->h);
+			m_MaxX = m_Width - 1;
+			m_MaxY = m_Height - 1;
+
+			// Pre-compute channel shifts from surface format
+			auto const* fmt = m_pSurface->format;
+			m_RShift = fmt->Rshift;
+			m_GShift = fmt->Gshift;
+			m_BShift = fmt->Bshift;
+
 			assert(pDevice);
 
 
@@ -82,23 +94,31 @@ namespace mau
 
 		ColorRGB Sample(const Vector2& uv) const
 		{
-			float const u{ std::clamp(uv.x, 0.f, 1.f) };
-			float const v{ std::clamp(uv.y, 0.f, 1.f) };
-			uint32_t const x{ std::min(static_cast<uint32_t>(u * m_pSurface->w), static_cast<uint32_t>(m_pSurface->w - 1)) };
-			uint32_t const y{ std::min(static_cast<uint32_t>(v * m_pSurface->h), static_cast<uint32_t>(m_pSurface->h - 1)) };
+			uint32_t const x{ std::min(static_cast<uint32_t>(std::clamp(uv.x, 0.f, 1.f) * m_Width), m_MaxX) };
+			uint32_t const y{ std::min(static_cast<uint32_t>(std::clamp(uv.y, 0.f, 1.f) * m_Height), m_MaxY) };
 
-			uint8_t r{};
-			uint8_t g{};
-			uint8_t b{};
-			SDL_GetRGB(m_pSurfacePixels[(y * m_pSurface->w) + x], m_pSurface->format, &r, &g, &b);
-			static constexpr float normalizedFactor{ 1 / 255.f };
-			return { r * normalizedFactor, g * normalizedFactor, b * normalizedFactor };
-		 }
-		
+			uint32_t const pixel{ m_pSurfacePixels[y * m_Width + x] };
+			return {
+				static_cast<float>((pixel >> m_RShift) & 0xFF) * m_InvFF,
+				static_cast<float>((pixel >> m_GShift) & 0xFF) * m_InvFF,
+				static_cast<float>((pixel >> m_BShift) & 0xFF) * m_InvFF
+			};
+		}
+
 
 	private:
 		SDL_Surface* m_pSurface{ nullptr };
 		uint32_t* m_pSurfacePixels{ nullptr };
+
+		// Cached for fast sampling
+		uint32_t m_Width{};
+		uint32_t m_Height{};
+		uint32_t m_MaxX{};
+		uint32_t m_MaxY{};
+		uint8_t m_RShift{};
+		uint8_t m_GShift{};
+		uint8_t m_BShift{};
+		static constexpr float m_InvFF{ 1.f / 255.f };
 
 		ID3D11Texture2D* m_pResource{};
 		ID3D11ShaderResourceView* m_pShaderResourceView{};
