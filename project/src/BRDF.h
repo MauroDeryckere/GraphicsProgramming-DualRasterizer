@@ -4,7 +4,7 @@
 #include "Vector3.h"
 #include "ColorRGB.h"
 
-namespace dae
+namespace mau
 {
 	namespace BRDF
 	{

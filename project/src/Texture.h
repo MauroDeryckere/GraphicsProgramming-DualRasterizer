@@ -5,7 +5,7 @@
 #include "Vector2.h"
 #include <filesystem>
 
-namespace dae
+namespace mau
 {
 	class Texture final
 	{

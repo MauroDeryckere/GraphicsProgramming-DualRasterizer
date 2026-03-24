@@ -1,7 +1,7 @@
 #include "Mesh.h"
 #include "Utils.h"
 
-dae::Mesh::Mesh(ID3D11Device* pDevice, std::string const& path, std::shared_ptr<BaseEffect> pEffect)
+mau::Mesh::Mesh(ID3D11Device* pDevice, std::string const& path, std::shared_ptr<BaseEffect> pEffect)
 {
 	//Initialize models
 	m_Vertices = {};

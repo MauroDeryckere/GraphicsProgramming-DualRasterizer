@@ -7,7 +7,7 @@
 #undef main
 #include "Renderer.h"
 
-using namespace dae;
+using namespace mau;
 
 void PrintSettings() noexcept;
 
@@ -30,7 +30,7 @@ int main(int argc, char* args[])
 	const uint32_t height = 480;
 
 	SDL_Window* pWindow = SDL_CreateWindow(
-			"DirectX - Mauro Deryckere/2DAE19N",
+			"Dual Rasterizer - Mauro Deryckere",
 			SDL_WINDOWPOS_UNDEFINED,
 			SDL_WINDOWPOS_UNDEFINED,
 			width, height, 0);
@@ -40,9 +40,8 @@ int main(int argc, char* args[])
 
 	PrintSettings();
 
-	//Initialize "framework"
-	const auto pTimer = new Timer();
-	const auto pRenderer = new Renderer(pWindow);
+	const auto pTimer = std::make_unique<Timer>();
+	const auto pRenderer = std::make_unique<Renderer>(pWindow);
 
 	bool displayFPS = false;
 	//Start loop
@@ -141,10 +140,6 @@ int main(int argc, char* args[])
 		}
 	}
 	pTimer->Stop();
-
-	//Shutdown "framework"
-	delete pRenderer;
-	delete pTimer;
 
 	ShutDown(pWindow);
 	return 0;

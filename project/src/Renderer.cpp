@@ -6,7 +6,7 @@
 #include "Effect.h"
 #include <execution>
 
-namespace dae {
+namespace mau {
 
 	Renderer::Renderer(SDL_Window* pWindow) :
 		m_pWindow(pWindow)
@@ -30,7 +30,7 @@ namespace dae {
 		}
 		else
 		{
-			m_IsSofwareRasterizerMode = true;
+			m_IsSoftwareRasterizerMode = true;
 			std::cout << RED << "DirectX initialization failed!" << RESET << std::endl;
 		}
 
@@ -88,7 +88,7 @@ namespace dae {
 
 	void Renderer::ChangeSamplerState() noexcept
 	{
-		if (m_IsSofwareRasterizerMode)
+		if (m_IsSoftwareRasterizerMode)
 		{
 			std::cout << RED << "Not in hardware rasterizer, can not cycle sampler state setting\n" << RESET;
 			return;
@@ -145,7 +145,7 @@ namespace dae {
 
 	void Renderer::Render() const
 	{
-		if (m_IsSofwareRasterizerMode)
+		if (m_IsSoftwareRasterizerMode)
 		{
 			RenderSoftware();
 			return;

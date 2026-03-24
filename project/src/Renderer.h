@@ -11,7 +11,7 @@
 struct SDL_Window;
 struct SDL_Surface;
 
-namespace dae
+namespace mau
 {
 	class Texture;
 	class Mesh;
@@ -31,7 +31,7 @@ namespace dae
 		void Render() const;
 
 	#pragma region RenderSettings
-		// When F1 is pressed, switch between sofware and hardware rasterizer
+		// When F1 is pressed, switch between software and hardware rasterizer
 		void ToggleRasterizerMode() noexcept
 		{
 			if (!m_IsDirectXInitialized)
@@ -40,9 +40,9 @@ namespace dae
 				return;
 			}
 
-			m_IsSofwareRasterizerMode = !m_IsSofwareRasterizerMode;
+			m_IsSoftwareRasterizerMode = !m_IsSoftwareRasterizerMode;
 
-			if (m_IsSofwareRasterizerMode)
+			if (m_IsSoftwareRasterizerMode)
 			{
 				std::cout << "Rasterizer -> " << GREEN << "Software\n";
 				std::cout << RESET;
@@ -51,7 +51,7 @@ namespace dae
 			std::cout << "Rasterizer -> " << GREEN << "Hardware\n";
 			std::cout << RESET;
 		}
-		// When F2 is pressed, switch beteen rotating or not rotating the models
+		// When F2 is pressed, switch between rotating or not rotating the models
 		void ToggleRotationMode() noexcept
 		{
 			m_IsRotationMode = !m_IsRotationMode;
@@ -64,12 +64,12 @@ namespace dae
 			std::cout << "Rotation -> " << RED << "Disabled\n";
 			std::cout << RESET;
 		}
-		// When F3 is pressed, switch beteen displaying or not displaying the fire mesh (only for the hardware rasterizer currently)
+		// When F3 is pressed, switch between displaying or not displaying the fire mesh (only for the hardware rasterizer currently)
 		void ToggleFireMesh() noexcept
 		{
-			if (m_IsSofwareRasterizerMode)
+			if (m_IsSoftwareRasterizerMode)
 			{
-				std::cout << RED << "Not in software rasterizer, can not toggle fire mesh setting\n" << RESET;
+				std::cout << RED << "Only available in hardware rasterizer\n" << RESET;
 				return;
 			}
 			m_DisplayFireMesh = !m_DisplayFireMesh;
@@ -87,7 +87,7 @@ namespace dae
 		// When F5 is pressed change to the next shading mode (only for the software rasterizer currently)
 		void ChangeShadingMode() noexcept
 		{
-			if (!m_IsSofwareRasterizerMode)
+			if (!m_IsSoftwareRasterizerMode)
 			{
 				std::cout << RED << "Not in software rasterizer, can not cycle shading mode setting\n" << RESET;
 				return;
@@ -121,7 +121,7 @@ namespace dae
 		//When F6 is pressed, toggle the normal map (only for the software rasterizer currently)
 		void ToggleNormalMap() noexcept
 		{
-			if (!m_IsSofwareRasterizerMode)
+			if (!m_IsSoftwareRasterizerMode)
 			{
 				std::cout << RED << "Not in software rasterizer, can not toggle normal map buffer setting\n" << RESET;
 				return;
@@ -140,7 +140,7 @@ namespace dae
 		// When F7 is pressed, toggle the depth buffer visualization (only for the software rasterizer currently)
 		void ToggleDisplayDepthBuffer() noexcept
 		{
-			if (!m_IsSofwareRasterizerMode)
+			if (!m_IsSoftwareRasterizerMode)
 			{
 				std::cout << RED << "Not in software rasterizer, can not toggle depth buffer setting\n" << RESET;
 				return;
@@ -159,7 +159,7 @@ namespace dae
 		// When F8 is pressed, toggle the bounding box visualization (only for the software rasterizer currently)
 		void ToggleBoundingBoxes() noexcept
 		{
-			if (!m_IsSofwareRasterizerMode)
+			if (!m_IsSoftwareRasterizerMode)
 			{
 				std::cout << RED << "Not in software rasterizer, can not toggle bounding boxes setting\n" << RESET;
 				return;
@@ -194,7 +194,7 @@ namespace dae
 				std::cout << RESET;
 				break;
 			case CullMode::None:
-				std::cout << "Cullings mode -> " << GREEN << "None\n";
+				std::cout << "Culling mode -> " << GREEN << "None\n";
 				std::cout << RESET;
 				break;
 			default: break;
@@ -215,7 +215,7 @@ namespace dae
 				m->SetCullingMode(m_pDevice, curr);
 			}
 		}
-		// When F10 is pressed, tooggle to display the uniform clear color (or not)
+		// When F10 is pressed, toggle to display the uniform clear color (or not)
 		void ToggleUniformClearColor() noexcept
 		{
 			m_DisplayUniformClearColor = !m_DisplayUniformClearColor;
@@ -238,7 +238,7 @@ namespace dae
 
 		Camera m_Camera{};
 
-		//Software rasiterizer
+		//Software rasterizer
 		SDL_Surface* m_pFrontBuffer{ nullptr };
 		SDL_Surface* m_pBackBuffer{ nullptr };
 		uint32_t* m_pBackBufferPixels{ nullptr };
@@ -273,7 +273,7 @@ namespace dae
 		std::unique_ptr<Texture> m_pFireDiffuseTexture{ nullptr };
 
 		//Settings
-		bool m_IsSofwareRasterizerMode{ false };
+		bool m_IsSoftwareRasterizerMode{ false };
 		bool m_IsRotationMode{ true };
 		bool m_DisplayFireMesh{ true };
 		SamplerState m_SamplerState{ SamplerState::Point };

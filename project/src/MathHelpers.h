@@ -1,7 +1,7 @@
 #pragma once
 #include <cmath>
 
-namespace dae
+namespace mau
 {
 	/* --- HELPER STRUCTS --- */
 	struct Int2

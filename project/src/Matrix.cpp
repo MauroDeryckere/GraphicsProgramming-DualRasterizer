@@ -7,7 +7,7 @@
 #include "MathHelpers.h"
 #include <cmath>
 
-namespace dae {
+namespace mau {
 	Matrix::Matrix(const Vector3& xAxis, const Vector3& yAxis, const Vector3& zAxis, const Vector3& t) :
 		Matrix({ xAxis, 0 }, { yAxis, 0 }, { zAxis, 0 }, { t, 1 })
 	{

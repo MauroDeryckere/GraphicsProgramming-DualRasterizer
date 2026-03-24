@@ -5,7 +5,7 @@
 #include "Vertex_In.h"
 #include "Matrix.h"
 
-namespace dae
+namespace mau
 {
 	enum class SamplerState : uint8_t
 	{

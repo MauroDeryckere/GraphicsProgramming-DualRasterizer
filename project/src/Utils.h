@@ -3,7 +3,7 @@
 #include "Math.h"
 #include "Mesh.h"
 
-namespace dae
+namespace mau
 {
 	namespace Utils
 	{

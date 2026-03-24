@@ -1,6 +1,6 @@
 #pragma once
 
-namespace dae
+namespace mau
 {
 	struct Vector2;
 	struct Vector4;

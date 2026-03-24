@@ -4,7 +4,7 @@
 #include "Vector3.h"
 #include "Vector4.h"
 
-namespace dae
+namespace mau
 {
 	struct Vertex_In
 	{

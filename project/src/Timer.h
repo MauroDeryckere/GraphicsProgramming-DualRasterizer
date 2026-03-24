@@ -3,7 +3,7 @@
 //Standard includes
 #include <cstdint>
 
-namespace dae
+namespace mau
 {
 	class Timer
 	{

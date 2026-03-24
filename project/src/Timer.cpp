@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "Timer.h"
 
-namespace dae
+namespace mau
 {
 	Timer::Timer()
 	{

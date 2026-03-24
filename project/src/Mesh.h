@@ -5,7 +5,7 @@
 #include "Texture.h"
 
 
-namespace dae
+namespace mau
 {
 	enum class PrimitiveTopology : uint8_t
 	{

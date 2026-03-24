@@ -12,7 +12,7 @@
 #include "Timer.h"
 #include "Matrix.h"
 
-namespace dae
+namespace mau
 {
 	struct Camera final
 	{

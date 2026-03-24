@@ -7,7 +7,7 @@
 #include "Vector2.h"
 #include "Vector3.h"
 
-namespace dae
+namespace mau
 {
 	Vector4::Vector4(float _x, float _y, float _z, float _w) : x(_x), y(_y), z(_z), w(_w) {}
 	Vector4::Vector4(const Vector3& v, float _w) : x(v.x), y(v.y), z(v.z), w(_w) {}
