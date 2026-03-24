@@ -380,7 +380,8 @@ namespace mau {
 				float const depth0{ m->GetVertices_Out()[idx1].position.z };
 				float const depth1{ m->GetVertices_Out()[idx2].position.z };
 				float const depth2{ m->GetVertices_Out()[idx3].position.z };
-				
+
+				// Z-buffer uses NDC z for depth testing
 				float const interpolatedDepth{ 1.f / (weight0 * (1.f / depth0) + weight1 * (1.f / depth1) + weight2 * (1.f / depth2)) };
 
 				if (interpolatedDepth < 0.f || interpolatedDepth > 1.f || m_pDepthBufferPixels[px + py * m_Width] < interpolatedDepth)
@@ -388,6 +389,12 @@ namespace mau {
 					continue;
 				}
 				m_pDepthBufferPixels[px + py * m_Width] = interpolatedDepth;
+
+				// Use original clip-space w for perspective-correct attribute interpolation
+				float const w0{ m->GetVertices_Out()[idx1].position.w };
+				float const w1{ m->GetVertices_Out()[idx2].position.w };
+				float const w2{ m->GetVertices_Out()[idx3].position.w };
+				float const interpolatedW{ 1.f / (weight0 / w0 + weight1 / w1 + weight2 / w2) };
 
 				if (m_ShowDepthBuffer)
 				{
@@ -405,15 +412,15 @@ namespace mau {
 																				+ weight1 * m->GetVertices()[idx2].position 
 																				+ weight2 * m->GetVertices()[idx3].position)) - m_Camera.origin).Normalized() };
 
-					pixelToShade.texcoord = interpolatedDepth * ((weight0 * m->GetVertices()[idx1].texcoord) / depth0
-																+ (weight1 * m->GetVertices()[idx2].texcoord) / depth1
-																+ (weight2 * m->GetVertices()[idx3].texcoord) / depth2);
-					pixelToShade.normal = Vector3{ interpolatedDepth * (weight0 * m->GetVertices_Out()[idx1].normal / m->GetVertices_Out()[idx1].position.w
-																	  + weight1 * m->GetVertices_Out()[idx2].normal / m->GetVertices_Out()[idx2].position.w 
-																	  + weight2 * m->GetVertices_Out()[idx3].normal / m->GetVertices_Out()[idx3].position.w) }.Normalized();
-					pixelToShade.tangent = Vector3{ interpolatedDepth * (weight0 * m->GetVertices_Out()[idx1].tangent / m->GetVertices_Out()[idx1].position.w 
-																		+ weight1 * m->GetVertices_Out()[idx2].tangent / m->GetVertices_Out()[idx2].position.w 
-																		+ weight2 * m->GetVertices_Out()[idx3].tangent / m->GetVertices_Out()[idx3].position.w) }.Normalized();
+					pixelToShade.texcoord = interpolatedW * ((weight0 * m->GetVertices()[idx1].texcoord) / w0
+																+ (weight1 * m->GetVertices()[idx2].texcoord) / w1
+																+ (weight2 * m->GetVertices()[idx3].texcoord) / w2);
+					pixelToShade.normal = Vector3{ interpolatedW * (weight0 * m->GetVertices_Out()[idx1].normal / w0
+																  + weight1 * m->GetVertices_Out()[idx2].normal / w1
+																  + weight2 * m->GetVertices_Out()[idx3].normal / w2) }.Normalized();
+					pixelToShade.tangent = Vector3{ interpolatedW * (weight0 * m->GetVertices_Out()[idx1].tangent / w0
+																	+ weight1 * m->GetVertices_Out()[idx2].tangent / w1
+																	+ weight2 * m->GetVertices_Out()[idx3].tangent / w2) }.Normalized();
 
 
 					finalColor = PixelShading(m, pixelToShade, viewDir);

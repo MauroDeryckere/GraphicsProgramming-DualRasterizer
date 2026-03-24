@@ -131,9 +131,10 @@ VS_OUTPUT VS(VS_INPUT input)
 float4 PS(VS_OUTPUT input, SamplerState s) : SV_TARGET
 { 
     const float3 normalMap = 2.0f * gNormalMap.Sample(s, input.TexCoord).rgb - float3(1.0f, 1.0f, 1.0f);
-    const float3 normal = mul(normalMap, float3x4(float4(input.Tangent, 0.0f), // TBN matrix
-                                                  float4(cross(input.Normal, input.Tangent), 0.0f),
-                                                  float4(input.Normal, 0.0)));
+    const float3x3 TBN = float3x3(input.Tangent,
+                                    cross(input.Normal, input.Tangent),
+                                    input.Normal);
+    const float3 normal = normalize(mul(normalMap, TBN));
     const float observedArea = saturate(dot(normal, -gLightDirection));
     
     // skip further calculations if possible
@@ -144,11 +145,11 @@ float4 PS(VS_OUTPUT input, SamplerState s) : SV_TARGET
     
     const float3 viewDir = normalize(input.WorldPosition.xyz - gCameraPosition); 
     const float4 lambert = Lambert(gLightIntensity, gDiffuseMap.Sample(s, input.TexCoord));
-    const float4 specular = gSpecularMap.Sample(s, input.TexCoord) * Phong(1.0f, 
-                                                                            gShininess * gGlossinessMap.Sample(s, input.TexCoord).b, 
-                                                                            gLightDirection, 
-                                                                            viewDir, 
-                                                                            input.Normal);
+    const float4 specular = gSpecularMap.Sample(s, input.TexCoord) * Phong(1.0f,
+                                                                            gShininess * gGlossinessMap.Sample(s, input.TexCoord).b,
+                                                                            gLightDirection,
+                                                                            viewDir,
+                                                                            normal);
     // soeme different returns to double check everything works correctly
     // return float4(normalMap, 1.0F);
     // return lambert;
