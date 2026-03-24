@@ -32,28 +32,31 @@ namespace mau
 			return true;
 		}
 
-		// Checks if at least one part of triangle is outside frustum
+		// Checks if the entire triangle is outside the frustum (all vertices on the same wrong side of a plane)
 		[[nodiscard]] inline bool IsTriangleOutsideFrustum(Mesh const* mesh, uint32_t idx1, uint32_t idx2, uint32_t idx3) noexcept
 		{
 			const auto& v1 = mesh->GetVertices_Out()[idx1].position;
 			const auto& v2 = mesh->GetVertices_Out()[idx2].position;
 			const auto& v3 = mesh->GetVertices_Out()[idx3].position;
 
-			// Check all vertices against each frustum plane
+			// Near plane
 			if (v1.z < 0 && v2.z < 0 && v3.z < 0)
-			{
 				return true;
-			}
+			// Far plane
 			if (v1.z > 1 && v2.z > 1 && v3.z > 1)
-			{
 				return true;
-			}
-
-			for (int i = 0; i < 2; ++i)
-			{
-				if ((v1[i] > 1.f || v1[i] < -1.f) || (v2[i] > 1.f || v2[i] < -1.f) || (v3[i] > 1.f || v3[i] < -1.f))
-					return true;
-			}
+			// Left plane
+			if (v1.x < -1 && v2.x < -1 && v3.x < -1)
+				return true;
+			// Right plane
+			if (v1.x > 1 && v2.x > 1 && v3.x > 1)
+				return true;
+			// Bottom plane
+			if (v1.y < -1 && v2.y < -1 && v3.y < -1)
+				return true;
+			// Top plane
+			if (v1.y > 1 && v2.y > 1 && v3.y > 1)
+				return true;
 
 			return false;
 		}
