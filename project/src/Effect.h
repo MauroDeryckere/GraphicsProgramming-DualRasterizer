@@ -262,14 +262,11 @@ namespace mau
 				std::wcout << L"Effect variable 'gSpecularMap' not valid\n";
 			}
 		}
-		~PixelShadingEffect()
+		~PixelShadingEffect() override
 		{
-			SAFE_RELEASE(m_pDiffuseMapVariable)
 			SAFE_RELEASE(m_pNormalMapVariable)
 			SAFE_RELEASE(m_pSpecularMapVariable)
 			SAFE_RELEASE(m_pGlossinessMapVariable)
-
-			BaseEffect::~BaseEffect();
 		}
 
 		//Textures
