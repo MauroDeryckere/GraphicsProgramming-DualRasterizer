@@ -459,10 +459,11 @@ namespace mau {
 
 
 				//Update Color in Buffer
-				m_pBackBufferPixels[pixelIdx] =
-					  (static_cast<uint8_t>(std::min(finalColor.r, 1.f) * 255) << 16)
-					| (static_cast<uint8_t>(std::min(finalColor.g, 1.f) * 255) << 8)
-					| (static_cast<uint8_t>(std::min(finalColor.b, 1.f) * 255));
+				finalColor.MaxToOne();
+				m_pBackBufferPixels[pixelIdx] = SDL_MapRGB(m_pBackBuffer->format,
+					static_cast<uint8_t>(finalColor.r * 255),
+					static_cast<uint8_t>(finalColor.g * 255),
+					static_cast<uint8_t>(finalColor.b * 255));
 			}
 		}
 	}
