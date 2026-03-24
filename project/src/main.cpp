@@ -122,7 +122,7 @@ int main(int argc, char* args[])
 		}
 
 		//--------- Update ---------
-		pRenderer->Update(pTimer);
+		pRenderer->Update(pTimer.get());
 
 		//--------- Render ---------
 		pRenderer->Render();
