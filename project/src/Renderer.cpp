@@ -344,84 +344,98 @@ namespace mau {
 		topRight.x = std::clamp(topRight.x, 0.f, static_cast<float>(m_Width));
 		topRight.y = std::clamp(topRight.y, 0.f, static_cast<float>(m_Height));
 
-		for (int px{ static_cast<int>(topLeft.x) }; px < static_cast<int>(topRight.x); ++px)
-		{
-			for (int py{ static_cast<int>(topLeft.y) }; py < static_cast<int>(topRight.y); ++py)
-			{
-				ColorRGB finalColor{ colors::White };
+			// Cache per-triangle data outside the pixel loop
+		auto const& vertsOut = m->GetVertices_Out();
+		auto const& vertsIn = m->GetVertices();
 
+		float const depth0{ vertsOut[idx1].position.z };
+		float const depth1{ vertsOut[idx2].position.z };
+		float const depth2{ vertsOut[idx3].position.z };
+		float const invDepth0{ 1.f / depth0 };
+		float const invDepth1{ 1.f / depth1 };
+		float const invDepth2{ 1.f / depth2 };
+
+		float const w0{ vertsOut[idx1].position.w };
+		float const w1{ vertsOut[idx2].position.w };
+		float const w2{ vertsOut[idx3].position.w };
+		float const invW0{ 1.f / w0 };
+		float const invW1{ 1.f / w1 };
+		float const invW2{ 1.f / w2 };
+
+		// Pre-divide attributes by w for perspective-correct interpolation
+		auto const& uv0 = vertsIn[idx1].texcoord;
+		auto const& uv1 = vertsIn[idx2].texcoord;
+		auto const& uv2 = vertsIn[idx3].texcoord;
+
+		auto const& n0 = vertsOut[idx1].normal;
+		auto const& n1 = vertsOut[idx2].normal;
+		auto const& n2 = vertsOut[idx3].normal;
+
+		auto const& t0 = vertsOut[idx1].tangent;
+		auto const& t1 = vertsOut[idx2].tangent;
+		auto const& t2 = vertsOut[idx3].tangent;
+
+		auto const& pos0 = vertsIn[idx1].position;
+		auto const& pos1 = vertsIn[idx2].position;
+		auto const& pos2 = vertsIn[idx3].position;
+
+		// Pre-compute edge vectors for barycentric calculation
+		Vector2 const edge12{ vert1 - vert2 };
+		Vector2 const edge20{ vert2 - vert0 };
+		Vector2 const edge01{ vert0 - vert1 };
+
+		int const startX{ static_cast<int>(topLeft.x) };
+		int const endX{ static_cast<int>(topRight.x) };
+		int const startY{ static_cast<int>(topLeft.y) };
+		int const endY{ static_cast<int>(topRight.y) };
+
+		for (int px{ startX }; px < endX; ++px)
+		{
+			for (int py{ startY }; py < endY; ++py)
+			{
 				if (m_ShowBoundingBoxes)
 				{
-					m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
-						static_cast<uint8_t>(finalColor.r * 255),
-						static_cast<uint8_t>(finalColor.g * 255),
-						static_cast<uint8_t>(finalColor.b * 255));
-
+					m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format, 255, 255, 255);
 					continue;
 				}
 
 				Vector2 const pixel{ static_cast<float>(px) + .5f, static_cast<float>(py) + .5f };
 
-				//Calculate barycentric coordinates
-				float weight0{ Vector2::Cross((pixel - vert1), (vert1 - vert2)) * invTotalTriangleArea };
-				float weight1{ Vector2::Cross((pixel - vert2), (vert2 - vert0)) * invTotalTriangleArea };
-				float weight2{ Vector2::Cross((pixel - vert0), (vert0 - vert1)) * invTotalTriangleArea };
+				float const weight0{ Vector2::Cross((pixel - vert1), edge12) * invTotalTriangleArea };
+				if (weight0 < 0.f) continue;
+				float const weight1{ Vector2::Cross((pixel - vert2), edge20) * invTotalTriangleArea };
+				if (weight1 < 0.f) continue;
+				float const weight2{ Vector2::Cross((pixel - vert0), edge01) * invTotalTriangleArea };
+				if (weight2 < 0.f) continue;
 
-				// Not in triangle
-				if (weight0 < 0.f || weight1 < 0.f || weight2 < 0.f)
+				float const interpolatedDepth{ 1.f / (weight0 * invDepth0 + weight1 * invDepth1 + weight2 * invDepth2) };
+
+				int const pixelIdx{ px + py * m_Width };
+				if (interpolatedDepth < 0.f || interpolatedDepth > 1.f || m_pDepthBufferPixels[pixelIdx] < interpolatedDepth)
 					continue;
 
-				//Normalize weights
-				auto const totWeight = weight0 + weight1 + weight2;
-				weight0 /= totWeight;
-				weight1 /= totWeight;
-				weight2 /= totWeight;
+				m_pDepthBufferPixels[pixelIdx] = interpolatedDepth;
 
-				float const depth0{ m->GetVertices_Out()[idx1].position.z };
-				float const depth1{ m->GetVertices_Out()[idx2].position.z };
-				float const depth2{ m->GetVertices_Out()[idx3].position.z };
-
-				// Z-buffer uses NDC z for depth testing
-				float const interpolatedDepth{ 1.f / (weight0 * (1.f / depth0) + weight1 * (1.f / depth1) + weight2 * (1.f / depth2)) };
-
-				if (interpolatedDepth < 0.f || interpolatedDepth > 1.f || m_pDepthBufferPixels[px + py * m_Width] < interpolatedDepth)
-				{
-					continue;
-				}
-				m_pDepthBufferPixels[px + py * m_Width] = interpolatedDepth;
-
-				// Use original clip-space w for perspective-correct attribute interpolation
-				float const w0{ m->GetVertices_Out()[idx1].position.w };
-				float const w1{ m->GetVertices_Out()[idx2].position.w };
-				float const w2{ m->GetVertices_Out()[idx3].position.w };
-				float const interpolatedW{ 1.f / (weight0 / w0 + weight1 / w1 + weight2 / w2) };
+				ColorRGB finalColor;
 
 				if (m_ShowDepthBuffer)
 				{
 					float const remap{ Utils::DepthRemap(interpolatedDepth, .985f, 1.f) };
-					finalColor = ColorRGB{ (1.f - remap) * 5,   (1.f - remap) * 5, 1.f };
+					finalColor = ColorRGB{ (1.f - remap) * 5, (1.f - remap) * 5, 1.f };
 				}
-				else // Pixel shading
+				else
 				{
+					float const interpolatedW{ 1.f / (weight0 * invW0 + weight1 * invW1 + weight2 * invW2) };
+
 					Vertex_Out pixelToShade{};
-					pixelToShade.position = { static_cast<float>(px), static_cast<float>(py), interpolatedDepth,interpolatedDepth };
+					pixelToShade.position = { static_cast<float>(px), static_cast<float>(py), interpolatedDepth, interpolatedDepth };
 
+					Vector3 const viewDir{ (m->GetWorldMatrix().TransformPoint(
+						weight0 * pos0 + weight1 * pos1 + weight2 * pos2) - m_Camera.origin).Normalized() };
 
-					//Calculate viewdirection
-					Vector3 const viewDir{ (m->GetWorldMatrix().TransformPoint((weight0 * m->GetVertices()[idx1].position 
-																				+ weight1 * m->GetVertices()[idx2].position 
-																				+ weight2 * m->GetVertices()[idx3].position)) - m_Camera.origin).Normalized() };
-
-					pixelToShade.texcoord = interpolatedW * ((weight0 * m->GetVertices()[idx1].texcoord) / w0
-																+ (weight1 * m->GetVertices()[idx2].texcoord) / w1
-																+ (weight2 * m->GetVertices()[idx3].texcoord) / w2);
-					pixelToShade.normal = Vector3{ interpolatedW * (weight0 * m->GetVertices_Out()[idx1].normal / w0
-																  + weight1 * m->GetVertices_Out()[idx2].normal / w1
-																  + weight2 * m->GetVertices_Out()[idx3].normal / w2) }.Normalized();
-					pixelToShade.tangent = Vector3{ interpolatedW * (weight0 * m->GetVertices_Out()[idx1].tangent / w0
-																	+ weight1 * m->GetVertices_Out()[idx2].tangent / w1
-																	+ weight2 * m->GetVertices_Out()[idx3].tangent / w2) }.Normalized();
-
+					pixelToShade.texcoord = interpolatedW * (weight0 * uv0 * invW0 + weight1 * uv1 * invW1 + weight2 * uv2 * invW2);
+					pixelToShade.normal = Vector3{ interpolatedW * (weight0 * n0 * invW0 + weight1 * n1 * invW1 + weight2 * n2 * invW2) }.Normalized();
+					pixelToShade.tangent = Vector3{ interpolatedW * (weight0 * t0 * invW0 + weight1 * t1 * invW1 + weight2 * t2 * invW2) }.Normalized();
 
 					finalColor = PixelShading(m, pixelToShade, viewDir);
 				}
