@@ -70,6 +70,19 @@ namespace mau
 			return inside(v1) && inside(v2) && inside(v3);
 		}
 
+		// Fixed-capacity polygon - lives entirely on the stack, no heap allocations.
+		// A triangle clipped against 6 planes produces at most 9 vertices.
+		uint8_t inline constexpr MAX_CLIP_VERTS{ 12 }; // some headroom
+
+		struct ClipPolygon
+		{
+			Vertex_Out verts[MAX_CLIP_VERTS];
+			uint8_t count{ 0 };
+
+			void Add(Vertex_Out const& v) noexcept { verts[count++] = v; }
+			void Clear() noexcept { count = 0; }
+		};
+
 		// Linearly interpolate two Vertex_Out at parameter t
 		[[nodiscard]] inline Vertex_Out LerpVertex(Vertex_Out const& a, Vertex_Out const& b, float t) noexcept
 		{
@@ -84,19 +97,18 @@ namespace mau
 		}
 
 		// Sutherland-Hodgman clip against a single plane defined by a distance function.
-		// distFunc(v) >= 0 means inside.
+		// distFunc(v) >= 0 means inside. All stack-allocated.
 		template<typename DistFunc>
-		inline void ClipAgainstPlane(std::vector<Vertex_Out>& polygon, DistFunc distFunc)
+		inline void ClipAgainstPlane(ClipPolygon& polygon, DistFunc distFunc) noexcept
 		{
-			if (polygon.size() < 3) return;
+			if (polygon.count < 3) return;
 
-			std::vector<Vertex_Out> output;
-			output.reserve(polygon.size() + 1);
+			ClipPolygon output;
 
-			for (size_t i{ 0 }; i < polygon.size(); ++i)
+			for (uint8_t i{ 0 }; i < polygon.count; ++i)
 			{
-				Vertex_Out const& current{ polygon[i] };
-				Vertex_Out const& next{ polygon[(i + 1) % polygon.size()] };
+				Vertex_Out const& current{ polygon.verts[i] };
+				Vertex_Out const& next{ polygon.verts[(i + 1) % polygon.count] };
 
 				float const dCurrent{ distFunc(current.position) };
 				float const dNext{ distFunc(next.position) };
@@ -106,34 +118,32 @@ namespace mau
 
 				if (currentInside)
 				{
-					output.push_back(current);
+					output.Add(current);
 					if (!nextInside)
 					{
-						// Going out - add intersection
 						float const t{ dCurrent / (dCurrent - dNext) };
-						output.push_back(LerpVertex(current, next, t));
+						output.Add(LerpVertex(current, next, t));
 					}
 				}
 				else if (nextInside)
 				{
-					// Going in - add intersection
 					float const t{ dCurrent / (dCurrent - dNext) };
-					output.push_back(LerpVertex(current, next, t));
+					output.Add(LerpVertex(current, next, t));
 				}
 			}
 
-			polygon = std::move(output);
+			polygon = output;
 		}
 
 		// Clip against near (z >= 0) and far (z <= w) planes only
-		inline void ClipTriangleNearFar(std::vector<Vertex_Out>& polygon)
+		inline void ClipTriangleNearFar(ClipPolygon& polygon) noexcept
 		{
 			ClipAgainstPlane(polygon, [](Vector4 const& p) { return p.z; });           // Near: z >= 0
 			ClipAgainstPlane(polygon, [](Vector4 const& p) { return p.w - p.z; });     // Far: z <= w
 		}
 
 		// Full 6-plane Sutherland-Hodgman clip
-		inline void ClipTriangleFull(std::vector<Vertex_Out>& polygon)
+		inline void ClipTriangleFull(ClipPolygon& polygon) noexcept
 		{
 			ClipAgainstPlane(polygon, [](Vector4 const& p) { return p.z; });           // Near: z >= 0
 			ClipAgainstPlane(polygon, [](Vector4 const& p) { return p.w - p.z; });     // Far: z <= w
@@ -144,13 +154,13 @@ namespace mau
 		}
 
 		// Guard-band check: are all vertices within a generous multiple of the viewport?
-		// If not, fall back to full 6-plane clip for x/y.
 		float inline constexpr GUARD_BAND_MULTIPLIER{ 2.f };
 
-		[[nodiscard]] inline bool IsInsideGuardBand(std::vector<Vertex_Out> const& polygon) noexcept
+		[[nodiscard]] inline bool IsInsideGuardBand(ClipPolygon const& polygon) noexcept
 		{
-			for (auto const& v : polygon)
+			for (uint8_t i{ 0 }; i < polygon.count; ++i)
 			{
+				auto const& v = polygon.verts[i];
 				float const guardW{ GUARD_BAND_MULTIPLIER * std::abs(v.position.w) };
 				if (v.position.x < -guardW || v.position.x > guardW ||
 					v.position.y < -guardW || v.position.y > guardW)

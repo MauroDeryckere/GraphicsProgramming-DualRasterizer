@@ -293,64 +293,65 @@ namespace mau {
 		// 2. Trivial accept - all vertices inside all frustum planes, skip clipping
 		bool const needsClipping{ !Utils::IsTriangleInsideFrustum(cv0.position, cv1.position, cv2.position) };
 
-		// Helper: perspective divide + screen-space conversion, then fan-triangulate and rasterize
 		float const halfWidth{ static_cast<float>(m_Width) * 0.5f };
 		float const halfHeight{ static_cast<float>(m_Height) * 0.5f };
 
-		auto perspectiveDivideAndRasterize = [&](std::vector<Vertex_Out> const& verts)
+		// Perspective divide + screen conversion for a single vertex (inline helper)
+		auto perspDivide = [halfWidth, halfHeight](Vertex_Out const& clipV, Vertex_Out& ndcOut, Vector2& screenOut)
 		{
-			std::vector<Vector2> screenVerts(verts.size());
-			std::vector<Vertex_Out> ndcVerts(verts.size());
-
-			for (size_t i{ 0 }; i < verts.size(); ++i)
-			{
-				ndcVerts[i] = verts[i];
-				float const invW{ 1.f / verts[i].position.w };
-				ndcVerts[i].position.x = verts[i].position.x * invW;
-				ndcVerts[i].position.y = verts[i].position.y * invW;
-				ndcVerts[i].position.z = verts[i].position.z * invW;
-
-				screenVerts[i] = {
-					(ndcVerts[i].position.x + 1.f) * halfWidth,
-					(1.f - ndcVerts[i].position.y) * halfHeight
-				};
-			}
-
-			for (size_t i{ 1 }; i + 1 < verts.size(); ++i)
-			{
-				RasterizeTriangle(m,
-					screenVerts[0], screenVerts[i], screenVerts[i + 1],
-					ndcVerts[0], ndcVerts[i], ndcVerts[i + 1]);
-			}
+			ndcOut = clipV;
+			float const invW{ 1.f / clipV.position.w };
+			ndcOut.position.x = clipV.position.x * invW;
+			ndcOut.position.y = clipV.position.y * invW;
+			ndcOut.position.z = clipV.position.z * invW;
+			screenOut = { (ndcOut.position.x + 1.f) * halfWidth, (1.f - ndcOut.position.y) * halfHeight };
 		};
 
 		if (!needsClipping)
 		{
-			// Trivial accept - no allocation needed
-			perspectiveDivideAndRasterize({ cv0, cv1, cv2 });
+			// Trivial accept - fast path, no clipping, all on stack
+			Vertex_Out ndc0, ndc1, ndc2;
+			Vector2 s0, s1, s2;
+			perspDivide(cv0, ndc0, s0);
+			perspDivide(cv1, ndc1, s1);
+			perspDivide(cv2, ndc2, s2);
+			RasterizeTriangle(m, s0, s1, s2, ndc0, ndc1, ndc2);
 			return;
 		}
 
 		// 3. Near/far clip (mandatory - prevents behind-camera artifacts)
-		std::vector<Vertex_Out> polygon{ cv0, cv1, cv2 };
+		Utils::ClipPolygon polygon;
+		polygon.Add(cv0); polygon.Add(cv1); polygon.Add(cv2);
 		Utils::ClipTriangleNearFar(polygon);
 
-		if (polygon.size() < 3)
+		if (polygon.count < 3)
 			return;
 
 		// 4. Guard-band check - if vertices stay within guard band, skip x/y clipping
 		if (!Utils::IsInsideGuardBand(polygon))
 		{
 			// Full 6-plane clip as fallback
-			polygon = { cv0, cv1, cv2 };
+			polygon.Clear();
+			polygon.Add(cv0); polygon.Add(cv1); polygon.Add(cv2);
 			Utils::ClipTriangleFull(polygon);
 
-			if (polygon.size() < 3)
+			if (polygon.count < 3)
 				return;
 		}
 
-		// 5 & 6. Perspective divide + fan-triangulate + rasterize
-		perspectiveDivideAndRasterize(polygon);
+		// 5 & 6. Perspective divide + fan-triangulate + rasterize (all on stack)
+		Vector2 screenVerts[Utils::MAX_CLIP_VERTS];
+		Vertex_Out ndcVerts[Utils::MAX_CLIP_VERTS];
+
+		for (uint8_t i{ 0 }; i < polygon.count; ++i)
+			perspDivide(polygon.verts[i], ndcVerts[i], screenVerts[i]);
+
+		for (uint8_t i{ 1 }; i + 1 < polygon.count; ++i)
+		{
+			RasterizeTriangle(m,
+				screenVerts[0], screenVerts[i], screenVerts[i + 1],
+				ndcVerts[0], ndcVerts[i], ndcVerts[i + 1]);
+		}
 	}
 
 	void Renderer::RasterizeTriangle(Mesh const* m,
