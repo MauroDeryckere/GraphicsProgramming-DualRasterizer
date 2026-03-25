@@ -2,7 +2,7 @@
 
 A software (CPU) and hardware (GPU) rasterizer built with C++ and DirectX 11. You can switch between both rasterizers at runtime and change various render settings on the fly.
 
-<!-- Add screenshots/GIFs here -->
+![Image](docs/Example.png)
 
 ## Table of Contents
 - [About](#about)
