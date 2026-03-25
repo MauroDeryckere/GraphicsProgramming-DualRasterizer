@@ -139,7 +139,7 @@ float4 PS(VS_OUTPUT input, SamplerState s) : SV_TARGET
     // skip further calculations if possible
     if (observedArea <= 0.f)
     {
-        return float4(0.f, 0.f, 0.f, 0.f);
+        return gAmbientColor;
     }
     
     const float3 viewDir = normalize(input.WorldPosition.xyz - gCameraPosition); 

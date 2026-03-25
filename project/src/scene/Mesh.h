@@ -62,6 +62,10 @@ namespace mau
 		{
 			m_pEffect->SetCameraPosition(cameraPos);
 		}
+		void UpdateAmbientColor(const float* rgba)
+		{
+			m_pEffect->SetAmbientColor(rgba);
+		}
 		void UpdateEffectMatrices(Matrix const& viewProjectionMatrix)
 		{
 			m_pEffect->SetWorldViewProjectionMatrix(m_WorldMatrix * viewProjectionMatrix);

@@ -53,6 +53,11 @@ namespace mau
 			{
 				std::wcout << L"m_pCameraPosition not valid" << std::endl;
 			}
+			m_pAmbientColor = m_pEffect->GetVariableByName("gAmbientColor")->AsVector();
+			if (!m_pAmbientColor->IsValid())
+			{
+				std::wcout << L"m_pAmbientColor not valid" << std::endl;
+			}
 
 			//Textures
 			m_pDiffuseMapVariable = m_pEffect->GetVariableByName("gDiffuseMap")->AsShaderResource();
@@ -100,8 +105,12 @@ namespace mau
 		void SetCameraPosition(const Vector3& pos)
 		{
 			assert(m_pCameraPosition);
-			
 			m_pCameraPosition->SetFloatVector(reinterpret_cast<const float*>(&pos));
+		}
+		void SetAmbientColor(const float* rgba)
+		{
+			assert(m_pAmbientColor);
+			m_pAmbientColor->SetFloatVector(rgba);
 		}
 
 		//Textures
@@ -183,6 +192,7 @@ namespace mau
 		ID3DX11EffectMatrixVariable* m_pWorldMatrix{ nullptr };
 		ID3DX11EffectMatrixVariable* m_pWorldViewProjection{ nullptr };
 		ID3DX11EffectVectorVariable* m_pCameraPosition{ nullptr };
+		ID3DX11EffectVectorVariable* m_pAmbientColor{ nullptr };
 
 		ID3DX11EffectShaderResourceVariable* m_pDiffuseMapVariable{ nullptr };
 		ID3DX11EffectRasterizerVariable* m_pRasterizerVariable{ nullptr };
