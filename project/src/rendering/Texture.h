@@ -31,6 +31,7 @@ namespace mau
 			m_RShift = fmt->Rshift;
 			m_GShift = fmt->Gshift;
 			m_BShift = fmt->Bshift;
+			m_AShift = fmt->Ashift;
 
 			assert(pDevice);
 
@@ -105,6 +106,15 @@ namespace mau
 			};
 		}
 
+		[[nodiscard]] float SampleAlpha(const Vector2& uv) const
+		{
+			uint32_t const x{ std::min(static_cast<uint32_t>(std::clamp(uv.x, 0.f, 1.f) * m_Width), m_MaxX) };
+			uint32_t const y{ std::min(static_cast<uint32_t>(std::clamp(uv.y, 0.f, 1.f) * m_Height), m_MaxY) };
+
+			uint32_t const pixel{ m_pSurfacePixels[y * m_Width + x] };
+			return static_cast<float>((pixel >> m_AShift) & 0xFF) * m_InvFF;
+		}
+
 
 	private:
 		SDL_Surface* m_pSurface{ nullptr };
@@ -118,6 +128,7 @@ namespace mau
 		uint8_t m_RShift{};
 		uint8_t m_GShift{};
 		uint8_t m_BShift{};
+		uint8_t m_AShift{};
 		static constexpr float m_InvFF{ 1.f / 255.f };
 
 		ID3D11Texture2D* m_pResource{};

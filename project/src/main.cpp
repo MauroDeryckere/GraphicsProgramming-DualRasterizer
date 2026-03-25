@@ -163,7 +163,7 @@ void PrintSettings() noexcept
 
 	std::cout << "[F1]: Toggle Rasterizer Mode (Software - Hardware)\n";
 	std::cout << "[F2]: Toggle Rotation Mode\n";
-	std::cout << "[F3]: Toggle Display Fire Mesh ("<< RED << "Only works for hardware"<< YELLOW << ", not displayed in software rasterizer)\n";
+	std::cout << "[F3]: Toggle Display Fire Mesh\n";
 	std::cout << "[F4]: Cycle Sampler Mode (" << RED << "Only works for hardware"<< YELLOW <<")\n";
 	std::cout << "[F5]: Cycle Shading Mode (" << RED << "Only works for software"<< YELLOW <<")\n";
 	std::cout << "[F6]: Toggle Normal Mapping (" << RED << "Only works for software" << YELLOW << ")\n";

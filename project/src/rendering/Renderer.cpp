@@ -199,15 +199,12 @@ namespace mau {
 			SDL_FillRect(m_pBackBuffer, nullptr, SDL_MapRGB(m_pBackBuffer->format, static_cast<uint8_t>(SOFTWARE_COLOR[0] * 255), static_cast<uint8_t>(SOFTWARE_COLOR[1] * 255), static_cast<uint8_t>(SOFTWARE_COLOR[2] * 255)));
 		}
 
+		// Opaque pass - render all meshes except fire
 		for (auto & m : m_Meshes)
 		{
-			//Hard coded to fire mesh since we don't support this in software currently.
-			if (m == m_Meshes[1])
-			{
+			if (m == m_Meshes[1]) // Skip fire mesh (transparent, rendered after)
 				continue;
-			}
 
-			// Transform vertices to clip space (perspective divide deferred to after clipping)
 			VertexTransformationFunction(m.get(), m_ClipSpaceVertices);
 
 			PROFILER_SCOPE("Rasterization");
@@ -215,14 +212,12 @@ namespace mau {
 			{
 			case PrimitiveTopology::TriangleList:
 				std::for_each(
-					std::execution::par_unseq, // Note: depth buffer access is not atomic - potential race on overlapping triangles
+					std::execution::par_unseq,
 					m->GetIndices().begin(), m->GetIndices().end(),
 					[this, &m](uint32_t v)
 					{
 						if (v % 3 == 0)
-						{
 							RenderTriangle(m.get(), m_ClipSpaceVertices, v, false);
-						}
 					});
 				break;
 			case PrimitiveTopology::TriangleStrip:
@@ -233,6 +228,29 @@ namespace mau {
 					{
 						RenderTriangle(m.get(), m_ClipSpaceVertices, v, v % 2);
 					});
+				break;
+			default:
+				break;
+			}
+		}
+
+		// Transparent pass - fire mesh with alpha blending, no depth write
+		if (m_DisplayFireMesh && m_Meshes.size() > 1)
+		{
+			auto& fireMesh = m_Meshes[1];
+			VertexTransformationFunction(fireMesh.get(), m_ClipSpaceVertices);
+
+			// Sequential execution - alpha blending requires read-modify-write which isn't safe in parallel
+			PROFILER_SCOPE("Fire Rasterization");
+			switch (fireMesh->GetPrimitiveTopology())
+			{
+			case PrimitiveTopology::TriangleList:
+				for (size_t v{ 0 }; v < fireMesh->GetIndices().size(); v += 3)
+					RenderFireTriangle(fireMesh.get(), m_ClipSpaceVertices, static_cast<uint32_t>(v), false);
+				break;
+			case PrimitiveTopology::TriangleStrip:
+				for (size_t v{ 0 }; v + 2 < fireMesh->GetIndices().size(); ++v)
+					RenderFireTriangle(fireMesh.get(), m_ClipSpaceVertices, static_cast<uint32_t>(v), v % 2);
 				break;
 			default:
 				break;
@@ -511,6 +529,153 @@ namespace mau {
 					static_cast<uint8_t>(finalColor.b * 255));
 			}
 		}
+	}
+
+	void Renderer::RenderFireTriangle(Mesh const* m, std::vector<Vertex_Out> const& clipSpaceVertices, uint32_t startVertex, bool swapVertex) const
+	{
+		size_t const idx1{ m->GetIndices()[startVertex + (2 * swapVertex)] };
+		size_t const idx2{ m->GetIndices()[startVertex + 1] };
+		size_t const idx3{ m->GetIndices()[startVertex + (!swapVertex * 2)] };
+
+		if (idx1 == idx2 || idx2 == idx3 || idx3 == idx1)
+			return;
+
+		auto const& cv0 = clipSpaceVertices[idx1];
+		auto const& cv1 = clipSpaceVertices[idx2];
+		auto const& cv2 = clipSpaceVertices[idx3];
+
+		if (Utils::IsTriangleOutsideFrustum(cv0.position, cv1.position, cv2.position))
+			return;
+
+		bool const needsNearFarClip{
+			cv0.position.z < 0 || cv1.position.z < 0 || cv2.position.z < 0 ||
+			cv0.position.z > cv0.position.w || cv1.position.z > cv1.position.w || cv2.position.z > cv2.position.w };
+
+		float const halfWidth{ static_cast<float>(m_Width) * 0.5f };
+		float const halfHeight{ static_cast<float>(m_Height) * 0.5f };
+
+		// Helper for fire pixel rasterization - alpha blend, no depth write
+		auto rasterizeFireTri = [&](Vector2 const& vert0, Vector2 const& vert1, Vector2 const& vert2,
+			Vertex_Out const& v0, Vertex_Out const& v1, Vertex_Out const& v2)
+		{
+			float const totalTriangleArea{ (vert1.x - vert0.x) * (vert2.y - vert0.y) - (vert1.y - vert0.y) * (vert2.x - vert0.x) };
+			if (totalTriangleArea == 0.f) return;
+
+			float const invTotalTriangleArea{ 1.f / totalTriangleArea };
+
+			Vector2 topLeft{ Vector2::Min(vert0, Vector2::Min(vert1, vert2)) - Vector2{1.f, 1.f} };
+			Vector2 bottomRight{ Vector2::Max(vert0, Vector2::Max(vert1, vert2)) + Vector2{1.f, 1.f} };
+
+			topLeft.x = std::clamp(topLeft.x, 0.f, static_cast<float>(m_Width));
+			topLeft.y = std::clamp(topLeft.y, 0.f, static_cast<float>(m_Height));
+			bottomRight.x = std::clamp(bottomRight.x, 0.f, static_cast<float>(m_Width));
+			bottomRight.y = std::clamp(bottomRight.y, 0.f, static_cast<float>(m_Height));
+
+			float const invDepth0{ 1.f / v0.position.z };
+			float const invDepth1{ 1.f / v1.position.z };
+			float const invDepth2{ 1.f / v2.position.z };
+
+			float const invW0{ 1.f / v0.position.w };
+			float const invW1{ 1.f / v1.position.w };
+			float const invW2{ 1.f / v2.position.w };
+
+			Vector2 const edge12{ vert1 - vert2 };
+			Vector2 const edge20{ vert2 - vert0 };
+			Vector2 const edge01{ vert0 - vert1 };
+
+			int const startX{ static_cast<int>(topLeft.x) };
+			int const endX{ static_cast<int>(bottomRight.x) };
+			int const startY{ static_cast<int>(topLeft.y) };
+			int const endY{ static_cast<int>(bottomRight.y) };
+
+			for (int px{ startX }; px < endX; ++px)
+			{
+				for (int py{ startY }; py < endY; ++py)
+				{
+					Vector2 const pixel{ static_cast<float>(px) + .5f, static_cast<float>(py) + .5f };
+
+					float const weight0{ Vector2::Cross((pixel - vert1), edge12) * invTotalTriangleArea };
+					if (weight0 < 0.f) continue;
+					float const weight1{ Vector2::Cross((pixel - vert2), edge20) * invTotalTriangleArea };
+					if (weight1 < 0.f) continue;
+					float const weight2{ Vector2::Cross((pixel - vert0), edge01) * invTotalTriangleArea };
+					if (weight2 < 0.f) continue;
+
+					float const interpolatedDepth{ 1.f / (weight0 * invDepth0 + weight1 * invDepth1 + weight2 * invDepth2) };
+
+					int const pixelIdx{ px + py * m_Width };
+					// Depth test but NO depth write (matches HLSL DepthWriteMask = zero)
+					if (interpolatedDepth < 0.f || interpolatedDepth > 1.f || m_DepthBuffer.data()[pixelIdx] < interpolatedDepth)
+						continue;
+
+					float const interpolatedW{ 1.f / (weight0 * invW0 + weight1 * invW1 + weight2 * invW2) };
+					Vector2 const uv{ interpolatedW * (weight0 * v0.texcoord * invW0 + weight1 * v1.texcoord * invW1 + weight2 * v2.texcoord * invW2) };
+
+					// Sample diffuse + alpha
+					ColorRGB const fireColor{ m_pFireDiffuseTexture->Sample(uv) };
+					float const alpha{ m_pFireDiffuseTexture->SampleAlpha(uv) };
+
+					// Read existing pixel and alpha blend: src_alpha, inv_src_alpha
+					uint8_t existR, existG, existB;
+					SDL_GetRGB(m_pBackBufferPixels[pixelIdx], m_pBackBuffer->format, &existR, &existG, &existB);
+
+					float const invAlpha{ 1.f - alpha };
+					ColorRGB blended{
+						alpha * fireColor.r + invAlpha * (existR * (1.f / 255.f)),
+						alpha * fireColor.g + invAlpha * (existG * (1.f / 255.f)),
+						alpha * fireColor.b + invAlpha * (existB * (1.f / 255.f))
+					};
+
+					blended.MaxToOne();
+					m_pBackBufferPixels[pixelIdx] = SDL_MapRGB(m_pBackBuffer->format,
+						static_cast<uint8_t>(blended.r * 255),
+						static_cast<uint8_t>(blended.g * 255),
+						static_cast<uint8_t>(blended.b * 255));
+				}
+			}
+		};
+
+		if (!needsNearFarClip)
+		{
+			Vertex_Out ndc0 = m_NdcVertices[idx1], ndc1 = m_NdcVertices[idx2], ndc2 = m_NdcVertices[idx3];
+			rasterizeFireTri(m_ScreenVertices[idx1], m_ScreenVertices[idx2], m_ScreenVertices[idx3], ndc0, ndc1, ndc2);
+			return;
+		}
+
+		Utils::ClipPolygon polygon;
+		polygon.Add(cv0); polygon.Add(cv1); polygon.Add(cv2);
+		Utils::ClipTriangleNearFar(polygon);
+
+		if (polygon.count < 3)
+			return;
+
+		if (!Utils::IsInsideGuardBand(polygon))
+		{
+			polygon.Clear();
+			polygon.Add(cv0); polygon.Add(cv1); polygon.Add(cv2);
+			Utils::ClipTriangleFull(polygon);
+			if (polygon.count < 3)
+				return;
+		}
+
+		Vector2 screenVerts[Utils::MAX_CLIP_VERTS];
+		Vertex_Out ndcVerts[Utils::MAX_CLIP_VERTS];
+
+		for (uint8_t i{ 0 }; i < polygon.count; ++i)
+		{
+			ndcVerts[i] = polygon.verts[i];
+			float const invW{ 1.f / polygon.verts[i].position.w };
+			ndcVerts[i].position.x = polygon.verts[i].position.x * invW;
+			ndcVerts[i].position.y = polygon.verts[i].position.y * invW;
+			ndcVerts[i].position.z = polygon.verts[i].position.z * invW;
+			screenVerts[i] = {
+				(ndcVerts[i].position.x + 1.f) * halfWidth,
+				(1.f - ndcVerts[i].position.y) * halfHeight
+			};
+		}
+
+		for (uint8_t i{ 1 }; i + 1 < polygon.count; ++i)
+			rasterizeFireTri(screenVerts[0], screenVerts[i], screenVerts[i + 1], ndcVerts[0], ndcVerts[i], ndcVerts[i + 1]);
 	}
 
 	ColorRGB Renderer::PixelShading(const Mesh* m, const Vertex_Out& v, const Vector3& viewDir) const

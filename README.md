@@ -42,7 +42,7 @@ This project started as a [DAE](https://www.digitalartsandentertainment.be/page/
 - DirectX 11 rendering pipeline
 - HLSL pixel shading (same lighting model as software)
 - Texture sampling modes: point, linear, anisotropic
-- Fire mesh with partial coverage (alpha blending)
+- Fire mesh with partial coverage (alpha blending, supported in both rasterizers)
 
 ### Shared
 - Toggle between software and hardware rasterizer (F1)
@@ -63,7 +63,7 @@ RMB + LMB: Move up/down<br>
 **Settings**<br>
 F1: Toggle software/hardware rasterizer<br>
 F2: Toggle rotation<br>
-F3: Toggle fire mesh (hardware only)<br>
+F3: Toggle fire mesh<br>
 F4: Cycle sampler state (hardware only)<br>
 F5: Cycle shading mode (software only)<br>
 F6: Toggle normal mapping (software only)<br>

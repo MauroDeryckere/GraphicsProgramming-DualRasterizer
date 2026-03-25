@@ -64,14 +64,9 @@ namespace mau
 			std::cout << "Rotation -> " << RED << "Disabled\n";
 			std::cout << RESET;
 		}
-		// When F3 is pressed, switch between displaying or not displaying the fire mesh (only for the hardware rasterizer currently)
+		// When F3 is pressed, toggle the fire mesh
 		void ToggleFireMesh() noexcept
 		{
-			if (m_IsSoftwareRasterizerMode)
-			{
-				std::cout << RED << "Only available in hardware rasterizer\n" << RESET;
-				return;
-			}
 			m_DisplayFireMesh = !m_DisplayFireMesh;
 			if (m_DisplayFireMesh)
 			{
@@ -313,6 +308,8 @@ namespace mau
 			Vector2 const& v0Screen, Vector2 const& v1Screen, Vector2 const& v2Screen,
 			Vertex_Out const& v0, Vertex_Out const& v1, Vertex_Out const& v2,
 			Vector3 const& pos0World, Vector3 const& pos1World, Vector3 const& pos2World) const;
+
+		void RenderFireTriangle(Mesh const* m, std::vector<Vertex_Out> const& clipSpaceVertices, uint32_t startVertex, bool swapVertex) const;
 
 		[[nodiscard]] ColorRGB PixelShading(const Mesh* m, const Vertex_Out& v, const Vector3& viewDir) const;
 	};
