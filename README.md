@@ -2,10 +2,9 @@
 
 A software (CPU) and hardware (GPU) rasterizer built with C++ and DirectX 11. You can switch between both rasterizers at runtime and change various render settings on the fly.
 
-![Image](docs/Example.png)
-
 ## Table of Contents
 - [About](#about)
+- [Screenshots](#screenshots)
 - [Features](#features)
   - [Software Rasterizer](#software-rasterizer)
   - [Hardware Rasterizer](#hardware-rasterizer)
@@ -16,6 +15,18 @@ A software (CPU) and hardware (GPU) rasterizer built with C++ and DirectX 11. Yo
 ## About
 
 This project started as a [DAE](https://www.digitalartsandentertainment.be/page/31/Game+Development) course assignment (Graphics Programming). The goal was to implement a software rasterizer and a DirectX 11 hardware rasterizer that can render the same scene, and allow switching between them at runtime.
+
+## Screenshots
+
+### Software Rasterizer
+![Software rasterizer - combined shading](docs/Software.png)
+
+### Hardware Rasterizer
+![Hardware rasterizer - with fire mesh](docs/Hardware.png)
+
+### Debug Views
+![Depth buffer visualization](docs/DepthOutput.png)
+![Bounding box visualization](docs/Boundingoutput.png)
 
 ## Features
 
