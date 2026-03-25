@@ -53,10 +53,10 @@ namespace mau
 			{
 				std::wcout << L"m_pCameraPosition not valid" << std::endl;
 			}
-			m_pAmbientColor = m_pEffect->GetVariableByName("gAmbientColor")->AsVector();
-			if (!m_pAmbientColor->IsValid())
+			auto* ambientVar = m_pEffect->GetVariableByName("gAmbientColor");
+			if (ambientVar && ambientVar->IsValid())
 			{
-				std::wcout << L"m_pAmbientColor not valid" << std::endl;
+				m_pAmbientColor = ambientVar->AsVector();
 			}
 
 			//Textures
@@ -109,8 +109,8 @@ namespace mau
 		}
 		void SetAmbientColor(const float* rgba)
 		{
-			assert(m_pAmbientColor);
-			m_pAmbientColor->SetFloatVector(rgba);
+			if (m_pAmbientColor)
+				m_pAmbientColor->SetFloatVector(rgba);
 		}
 
 		//Textures
