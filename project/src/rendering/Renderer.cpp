@@ -206,10 +206,9 @@ namespace mau {
 			{
 				continue;
 			}
-			//Meshes defined in world space before the transform function,
-			std::vector<Vector2> vertices_screenSpace{};
-			//convert each NDC coordinates to screen space / raster space
-			VertexTransformationFunction(vertices_screenSpace, m.get());
+
+			// Transform vertices to clip space (perspective divide deferred to after clipping)
+			VertexTransformationFunction(m.get(), m_ClipSpaceVertices);
 
 			PROFILER_SCOPE("Rasterization");
 			switch (m->GetPrimitiveTopology())
@@ -218,21 +217,21 @@ namespace mau {
 				std::for_each(
 					std::execution::par_unseq, // Note: depth buffer access is not atomic - potential race on overlapping triangles
 					m->GetIndices().begin(), m->GetIndices().end(),
-					[this, &m, &vertices_screenSpace](uint32_t v)
+					[this, &m](uint32_t v)
 					{
 						if (v % 3 == 0)
-						{  // Only process every 3rd index
-							RenderTriangle(m.get(), vertices_screenSpace, v, false);
+						{
+							RenderTriangle(m.get(), m_ClipSpaceVertices, v, false);
 						}
 					});
 				break;
 			case PrimitiveTopology::TriangleStrip:
 				std::for_each(
-					std::execution::par_unseq,  // Parallel execution policy - threading would be slightly better using a "custom" system but for this demo it is sufficient
+					std::execution::par_unseq,
 					m->GetIndices().begin(), m->GetIndices().end() - 2,
-					[this, &m, &vertices_screenSpace](uint32_t v)
+					[this, &m](uint32_t v)
 					{
-						RenderTriangle(m.get(), vertices_screenSpace, v, v % 2);
+						RenderTriangle(m.get(), m_ClipSpaceVertices, v, v % 2);
 					});
 				break;
 			default:
@@ -247,150 +246,178 @@ namespace mau {
 		SDL_UpdateWindowSurface(m_pWindow);
 	}
 
-	void Renderer::VertexTransformationFunction(std::vector<Vector2>& screenSpace, Mesh* mesh) const
+	void Renderer::VertexTransformationFunction(Mesh const* mesh, std::vector<Vertex_Out>& clipSpaceVertices) const
 	{
 		PROFILER_FUNCTION();
-		//projection stage:
-		//model -> world space -> world -> view space 
+		// Model -> world -> view -> clip space
 		auto const m{ mesh->GetWorldMatrix() * m_Camera.viewMatrix * m_Camera.projectionMatrix };
 
-		// Prepare the output container
-		screenSpace.resize(mesh->GetVertices().size());
-		mesh->GetVertices_Out_Ref().resize(mesh->GetVertices().size());
+		clipSpaceVertices.resize(mesh->GetVertices().size());
 
-		// Transform vertices in parallel
+		auto const& worldMatrix{ mesh->GetWorldMatrix() };
+
+		// Transform vertices to clip space in parallel (perspective divide deferred to after clipping)
 		std::transform(
-			std::execution::par,  // Parallel execution policy
+			std::execution::par,
 			mesh->GetVertices().begin(), mesh->GetVertices().end(),
-			mesh->GetVertices_Out_Ref().begin(),
+			clipSpaceVertices.begin(),
 			[&](auto const& v) {
 				Vertex_Out vOut{};
 				vOut.texcoord = v.texcoord;
-
 				vOut.position = m.TransformPoint(v.position.ToPoint4());
-
-				vOut.normal = mesh->GetWorldMatrix().TransformVector(v.normal);
-				vOut.tangent = mesh->GetWorldMatrix().TransformVector(v.tangent);
-
-				// View -> clipping space (NDC)
-				float const inverseWComponent{ 1.f / vOut.position.w };
-				vOut.position.x *= inverseWComponent;
-				vOut.position.y *= inverseWComponent;	
-				vOut.position.z *= inverseWComponent;
-
-				// Convert to screen space (raster space)
-				float const x_screen{ (vOut.position.x + 1) * 0.5f * static_cast<float>(m_Width) }; //center of pixel
-				float const y_screen{ (1 - vOut.position.y) * 0.5f * static_cast<float>(m_Height) };
-
-				// Store screen space coordinates
-				auto const idx{ &v - mesh->GetVertices().data() }; // Calculate correct idx
-				screenSpace[idx] = { x_screen, y_screen };
-
+				vOut.worldPosition = worldMatrix.TransformPoint(v.position);
+				vOut.normal = worldMatrix.TransformVector(v.normal);
+				vOut.tangent = worldMatrix.TransformVector(v.tangent);
 				return vOut;
 			});
 	}
 
-	void Renderer::RenderTriangle(Mesh* m, std::vector<Vector2> const& vertices, uint32_t startVertex, bool swapVertex) const
+	void Renderer::RenderTriangle(Mesh const* m, std::vector<Vertex_Out> const& clipSpaceVertices, uint32_t startVertex, bool swapVertex) const
 	{
-		//"Clipping" Stage
-		const size_t idx1{ m->GetIndices()[startVertex + (2 * swapVertex)] };
-		const size_t idx2{ m->GetIndices()[startVertex + 1] };
-		const size_t idx3{ m->GetIndices()[startVertex + (!swapVertex * 2)] };
+		size_t const idx1{ m->GetIndices()[startVertex + (2 * swapVertex)] };
+		size_t const idx2{ m->GetIndices()[startVertex + 1] };
+		size_t const idx3{ m->GetIndices()[startVertex + (!swapVertex * 2)] };
 
-		// Not a triangle when 2 vertices are equal
+		// Degenerate triangle
 		if (idx1 == idx2 || idx2 == idx3 || idx3 == idx1)
+			return;
+
+		auto const& cv0 = clipSpaceVertices[idx1];
+		auto const& cv1 = clipSpaceVertices[idx2];
+		auto const& cv2 = clipSpaceVertices[idx3];
+
+		// 1. Trivial reject - all vertices on wrong side of same frustum plane
+		if (Utils::IsTriangleOutsideFrustum(cv0.position, cv1.position, cv2.position))
+			return;
+
+		// 2. Trivial accept - all vertices inside all frustum planes, skip clipping
+		bool const needsClipping{ !Utils::IsTriangleInsideFrustum(cv0.position, cv1.position, cv2.position) };
+
+		// Helper: perspective divide + screen-space conversion, then fan-triangulate and rasterize
+		float const halfWidth{ static_cast<float>(m_Width) * 0.5f };
+		float const halfHeight{ static_cast<float>(m_Height) * 0.5f };
+
+		auto perspectiveDivideAndRasterize = [&](std::vector<Vertex_Out> const& verts)
 		{
+			std::vector<Vector2> screenVerts(verts.size());
+			std::vector<Vertex_Out> ndcVerts(verts.size());
+
+			for (size_t i{ 0 }; i < verts.size(); ++i)
+			{
+				ndcVerts[i] = verts[i];
+				float const invW{ 1.f / verts[i].position.w };
+				ndcVerts[i].position.x = verts[i].position.x * invW;
+				ndcVerts[i].position.y = verts[i].position.y * invW;
+				ndcVerts[i].position.z = verts[i].position.z * invW;
+
+				screenVerts[i] = {
+					(ndcVerts[i].position.x + 1.f) * halfWidth,
+					(1.f - ndcVerts[i].position.y) * halfHeight
+				};
+			}
+
+			for (size_t i{ 1 }; i + 1 < verts.size(); ++i)
+			{
+				RasterizeTriangle(m,
+					screenVerts[0], screenVerts[i], screenVerts[i + 1],
+					ndcVerts[0], ndcVerts[i], ndcVerts[i + 1]);
+			}
+		};
+
+		if (!needsClipping)
+		{
+			// Trivial accept - no allocation needed
+			perspectiveDivideAndRasterize({ cv0, cv1, cv2 });
 			return;
 		}
 
-		//Frustum Culling
-		if (Utils::IsTriangleOutsideFrustum(m, static_cast<uint32_t>(idx1), static_cast<uint32_t>(idx2), static_cast<uint32_t>(idx3)))
-			return; //clipping could be applied here instead of just returning.
+		// 3. Near/far clip (mandatory - prevents behind-camera artifacts)
+		std::vector<Vertex_Out> polygon{ cv0, cv1, cv2 };
+		Utils::ClipTriangleNearFar(polygon);
 
+		if (polygon.size() < 3)
+			return;
 
-		//Rasterization stage
-		const Vector2& vert0{ vertices[idx1] };
-		const Vector2& vert1{ vertices[idx2] };
-		const Vector2& vert2{ vertices[idx3] };
+		// 4. Guard-band check - if vertices stay within guard band, skip x/y clipping
+		if (!Utils::IsInsideGuardBand(polygon))
+		{
+			// Full 6-plane clip as fallback
+			polygon = { cv0, cv1, cv2 };
+			Utils::ClipTriangleFull(polygon);
+
+			if (polygon.size() < 3)
+				return;
+		}
+
+		// 5 & 6. Perspective divide + fan-triangulate + rasterize
+		perspectiveDivideAndRasterize(polygon);
+	}
+
+	void Renderer::RasterizeTriangle(Mesh const* m,
+		Vector2 const& vert0, Vector2 const& vert1, Vector2 const& vert2,
+		Vertex_Out const& v0, Vertex_Out const& v1, Vertex_Out const& v2) const
+	{
 		float const totalTriangleArea{ (vert1.x - vert0.x) * (vert2.y - vert0.y) - (vert1.y - vert0.y) * (vert2.x - vert0.x) };
 
+		// Face culling
 		switch (m_CurrCullMode)
 		{
 		case CullMode::Back:
-			if (totalTriangleArea < 0.f)
-			{
-				return; // Back-facing, cull it
-			}
+			if (totalTriangleArea < 0.f) return;
 			break;
 		case CullMode::Front:
-			if (totalTriangleArea > 0.f)
-			{
-				return; // Front-facing, cull it
-			}
+			if (totalTriangleArea > 0.f) return;
 			break;
-		case CullMode::None: // no face culling necessary
+		case CullMode::None:
 			break;
 		default:
 			break;
 		}
 
-		float const invTotalTriangleArea{ 1 / totalTriangleArea };
+		float const invTotalTriangleArea{ 1.f / totalTriangleArea };
 
-		//Bounding boxes logic - only loop over pixels within the smallest possible bounding box
-		//Small margin is required to prevent "black lines"
-		Vector2 topLeft{ Vector2::Min(vert0,Vector2::Min(vert1,vert2)) - Vector2{1.f, 1.f} };
-		Vector2 topRight{ Vector2::Max(vert0,Vector2::Max(vert1,vert2)) + Vector2{1.f, 1.f} };
-		
-		// prevent looping over something off-screen
+		// Bounding box with small margin to prevent black lines
+		Vector2 topLeft{ Vector2::Min(vert0, Vector2::Min(vert1, vert2)) - Vector2{1.f, 1.f} };
+		Vector2 bottomRight{ Vector2::Max(vert0, Vector2::Max(vert1, vert2)) + Vector2{1.f, 1.f} };
+
+		// Clamp to screen bounds
 		topLeft.x = std::clamp(topLeft.x, 0.f, static_cast<float>(m_Width));
 		topLeft.y = std::clamp(topLeft.y, 0.f, static_cast<float>(m_Height));
-		topRight.x = std::clamp(topRight.x, 0.f, static_cast<float>(m_Width));
-		topRight.y = std::clamp(topRight.y, 0.f, static_cast<float>(m_Height));
+		bottomRight.x = std::clamp(bottomRight.x, 0.f, static_cast<float>(m_Width));
+		bottomRight.y = std::clamp(bottomRight.y, 0.f, static_cast<float>(m_Height));
 
-			// Cache per-triangle data outside the pixel loop
-		auto const& vertsOut = m->GetVertices_Out();
-		auto const& vertsIn = m->GetVertices();
-
-		float const depth0{ vertsOut[idx1].position.z };
-		float const depth1{ vertsOut[idx2].position.z };
-		float const depth2{ vertsOut[idx3].position.z };
+		// Cache per-triangle data
+		float const depth0{ v0.position.z };
+		float const depth1{ v1.position.z };
+		float const depth2{ v2.position.z };
 		float const invDepth0{ 1.f / depth0 };
 		float const invDepth1{ 1.f / depth1 };
 		float const invDepth2{ 1.f / depth2 };
 
-		float const w0{ vertsOut[idx1].position.w };
-		float const w1{ vertsOut[idx2].position.w };
-		float const w2{ vertsOut[idx3].position.w };
-		float const invW0{ 1.f / w0 };
-		float const invW1{ 1.f / w1 };
-		float const invW2{ 1.f / w2 };
+		float const invW0{ 1.f / v0.position.w };
+		float const invW1{ 1.f / v1.position.w };
+		float const invW2{ 1.f / v2.position.w };
 
-		// Pre-divide attributes by w for perspective-correct interpolation
-		auto const& uv0 = vertsIn[idx1].texcoord;
-		auto const& uv1 = vertsIn[idx2].texcoord;
-		auto const& uv2 = vertsIn[idx3].texcoord;
+		auto const& uv0 = v0.texcoord;
+		auto const& uv1 = v1.texcoord;
+		auto const& uv2 = v2.texcoord;
 
-		auto const& n0 = vertsOut[idx1].normal;
-		auto const& n1 = vertsOut[idx2].normal;
-		auto const& n2 = vertsOut[idx3].normal;
+		auto const& n0 = v0.normal;
+		auto const& n1 = v1.normal;
+		auto const& n2 = v2.normal;
 
-		auto const& t0 = vertsOut[idx1].tangent;
-		auto const& t1 = vertsOut[idx2].tangent;
-		auto const& t2 = vertsOut[idx3].tangent;
+		auto const& t0 = v0.tangent;
+		auto const& t1 = v1.tangent;
+		auto const& t2 = v2.tangent;
 
-		auto const& pos0 = vertsIn[idx1].position;
-		auto const& pos1 = vertsIn[idx2].position;
-		auto const& pos2 = vertsIn[idx3].position;
-
-		// Pre-compute edge vectors for barycentric calculation
 		Vector2 const edge12{ vert1 - vert2 };
 		Vector2 const edge20{ vert2 - vert0 };
 		Vector2 const edge01{ vert0 - vert1 };
 
 		int const startX{ static_cast<int>(topLeft.x) };
-		int const endX{ static_cast<int>(topRight.x) };
+		int const endX{ static_cast<int>(bottomRight.x) };
 		int const startY{ static_cast<int>(topLeft.y) };
-		int const endY{ static_cast<int>(topRight.y) };
+		int const endY{ static_cast<int>(bottomRight.y) };
 
 		for (int px{ startX }; px < endX; ++px)
 		{
@@ -433,30 +460,20 @@ namespace mau {
 					Vertex_Out pixelToShade{};
 					pixelToShade.position = { static_cast<float>(px), static_cast<float>(py), interpolatedDepth, interpolatedDepth };
 
-					Vector3 const viewDir{ (m->GetWorldMatrix().TransformPoint(
-						weight0 * pos0 + weight1 * pos1 + weight2 * pos2) - m_Camera.origin).Normalized() };
+					// Perspective-correct view direction from interpolated world positions
+					Vector3 const worldPos{ interpolatedW * (
+						weight0 * v0.worldPosition * invW0 +
+						weight1 * v1.worldPosition * invW1 +
+						weight2 * v2.worldPosition * invW2) };
+					Vector3 const viewDir{ (worldPos - m_Camera.origin).Normalized() };
 
 					pixelToShade.texcoord = interpolatedW * (weight0 * uv0 * invW0 + weight1 * uv1 * invW1 + weight2 * uv2 * invW2);
 					pixelToShade.normal = Vector3{ interpolatedW * (weight0 * n0 * invW0 + weight1 * n1 * invW1 + weight2 * n2 * invW2) }.Normalized();
 					pixelToShade.tangent = Vector3{ interpolatedW * (weight0 * t0 * invW0 + weight1 * t1 * invW1 + weight2 * t2 * invW2) }.Normalized();
 
-					{
-						static std::atomic<int> s_shadingProfileCount{ 0 };
-						auto const count = s_shadingProfileCount.fetch_add(1, std::memory_order_relaxed);
-						if (count == 0)
-						{
-							PROFILER_SCOPE("PixelShading (first call)");
-							finalColor = PixelShading(m, pixelToShade, viewDir);
-						}
-						else
-						{
-							finalColor = PixelShading(m, pixelToShade, viewDir);
-						}
-					}
+					finalColor = PixelShading(m, pixelToShade, viewDir);
 				}
 
-
-				//Update Color in Buffer
 				finalColor.MaxToOne();
 				m_pBackBufferPixels[pixelIdx] = SDL_MapRGB(m_pBackBuffer->format,
 					static_cast<uint8_t>(finalColor.r * 255),

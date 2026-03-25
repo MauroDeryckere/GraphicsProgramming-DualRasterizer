@@ -89,15 +89,6 @@ namespace mau
 			return m_Indices;
 		}
 
-		[[nodiscard]] std::vector<Vertex_Out>& GetVertices_Out_Ref() noexcept
-		{
-			return m_Vertices_Out;
-		}
-		[[nodiscard]] std::vector<Vertex_Out> const& GetVertices_Out() const noexcept
-		{
-			return m_Vertices_Out;
-		}
-
 		[[nodiscard]] std::vector<Vertex_In> const& GetVertices() const noexcept
 		{
 			return m_Vertices;
@@ -129,9 +120,8 @@ namespace mau
 	private:
 		Matrix m_WorldMatrix{};
 
-		//These don't have to be stored for the hardware rasterizer but are necessare for software.
+		//These don't have to be stored for the hardware rasterizer but are necessary for software.
 		std::vector<Vertex_In> m_Vertices{};
-		std::vector<Vertex_Out> m_Vertices_Out{};
 		std::vector<uint32_t> m_Indices{};
 		PrimitiveTopology m_PrimitiveTopology{ PrimitiveTopology::TriangleList };
 

@@ -32,33 +32,133 @@ namespace mau
 			return true;
 		}
 
-		// Checks if the entire triangle is outside the frustum (all vertices on the same wrong side of a plane)
-		[[nodiscard]] inline bool IsTriangleOutsideFrustum(Mesh const* mesh, uint32_t idx1, uint32_t idx2, uint32_t idx3) noexcept
-		{
-			const auto& v1 = mesh->GetVertices_Out()[idx1].position;
-			const auto& v2 = mesh->GetVertices_Out()[idx2].position;
-			const auto& v3 = mesh->GetVertices_Out()[idx3].position;
+		// --- Frustum testing and clipping (clip space: -w <= x,y <= w, 0 <= z <= w) ---
 
-			// Near plane
+		// Trivial reject: all 3 vertices on the wrong side of the same frustum plane
+		[[nodiscard]] inline bool IsTriangleOutsideFrustum(Vector4 const& v1, Vector4 const& v2, Vector4 const& v3) noexcept
+		{
+			// Near: z >= 0
 			if (v1.z < 0 && v2.z < 0 && v3.z < 0)
 				return true;
-			// Far plane
-			if (v1.z > 1 && v2.z > 1 && v3.z > 1)
+			// Far: z <= w
+			if (v1.z > v1.w && v2.z > v2.w && v3.z > v3.w)
 				return true;
-			// Left plane
-			if (v1.x < -1 && v2.x < -1 && v3.x < -1)
+			// Left: x >= -w
+			if (v1.x < -v1.w && v2.x < -v2.w && v3.x < -v3.w)
 				return true;
-			// Right plane
-			if (v1.x > 1 && v2.x > 1 && v3.x > 1)
+			// Right: x <= w
+			if (v1.x > v1.w && v2.x > v2.w && v3.x > v3.w)
 				return true;
-			// Bottom plane
-			if (v1.y < -1 && v2.y < -1 && v3.y < -1)
+			// Bottom: y >= -w
+			if (v1.y < -v1.w && v2.y < -v2.w && v3.y < -v3.w)
 				return true;
-			// Top plane
-			if (v1.y > 1 && v2.y > 1 && v3.y > 1)
+			// Top: y <= w
+			if (v1.y > v1.w && v2.y > v2.w && v3.y > v3.w)
 				return true;
 
 			return false;
+		}
+
+		// Trivial accept: all 3 vertices inside all 6 frustum planes
+		[[nodiscard]] inline bool IsTriangleInsideFrustum(Vector4 const& v1, Vector4 const& v2, Vector4 const& v3) noexcept
+		{
+			auto inside = [](Vector4 const& v) {
+				return v.z >= 0 && v.z <= v.w
+					&& v.x >= -v.w && v.x <= v.w
+					&& v.y >= -v.w && v.y <= v.w;
+			};
+			return inside(v1) && inside(v2) && inside(v3);
+		}
+
+		// Linearly interpolate two Vertex_Out at parameter t
+		[[nodiscard]] inline Vertex_Out LerpVertex(Vertex_Out const& a, Vertex_Out const& b, float t) noexcept
+		{
+			Vertex_Out result{};
+			float const oneMinusT{ 1.f - t };
+			result.position = a.position * oneMinusT + b.position * t;
+			result.worldPosition = a.worldPosition * oneMinusT + b.worldPosition * t;
+			result.texcoord = a.texcoord * oneMinusT + b.texcoord * t;
+			result.normal = a.normal * oneMinusT + b.normal * t;
+			result.tangent = a.tangent * oneMinusT + b.tangent * t;
+			return result;
+		}
+
+		// Sutherland-Hodgman clip against a single plane defined by a distance function.
+		// distFunc(v) >= 0 means inside.
+		template<typename DistFunc>
+		inline void ClipAgainstPlane(std::vector<Vertex_Out>& polygon, DistFunc distFunc)
+		{
+			if (polygon.size() < 3) return;
+
+			std::vector<Vertex_Out> output;
+			output.reserve(polygon.size() + 1);
+
+			for (size_t i{ 0 }; i < polygon.size(); ++i)
+			{
+				Vertex_Out const& current{ polygon[i] };
+				Vertex_Out const& next{ polygon[(i + 1) % polygon.size()] };
+
+				float const dCurrent{ distFunc(current.position) };
+				float const dNext{ distFunc(next.position) };
+
+				bool const currentInside{ dCurrent >= 0.f };
+				bool const nextInside{ dNext >= 0.f };
+
+				if (currentInside)
+				{
+					output.push_back(current);
+					if (!nextInside)
+					{
+						// Going out - add intersection
+						float const t{ dCurrent / (dCurrent - dNext) };
+						output.push_back(LerpVertex(current, next, t));
+					}
+				}
+				else if (nextInside)
+				{
+					// Going in - add intersection
+					float const t{ dCurrent / (dCurrent - dNext) };
+					output.push_back(LerpVertex(current, next, t));
+				}
+			}
+
+			polygon = std::move(output);
+		}
+
+		// Clip against near (z >= 0) and far (z <= w) planes only
+		inline void ClipTriangleNearFar(std::vector<Vertex_Out>& polygon)
+		{
+			ClipAgainstPlane(polygon, [](Vector4 const& p) { return p.z; });           // Near: z >= 0
+			ClipAgainstPlane(polygon, [](Vector4 const& p) { return p.w - p.z; });     // Far: z <= w
+		}
+
+		// Full 6-plane Sutherland-Hodgman clip
+		inline void ClipTriangleFull(std::vector<Vertex_Out>& polygon)
+		{
+			ClipAgainstPlane(polygon, [](Vector4 const& p) { return p.z; });           // Near: z >= 0
+			ClipAgainstPlane(polygon, [](Vector4 const& p) { return p.w - p.z; });     // Far: z <= w
+			ClipAgainstPlane(polygon, [](Vector4 const& p) { return p.x + p.w; });     // Left: x >= -w
+			ClipAgainstPlane(polygon, [](Vector4 const& p) { return p.w - p.x; });     // Right: x <= w
+			ClipAgainstPlane(polygon, [](Vector4 const& p) { return p.y + p.w; });     // Bottom: y >= -w
+			ClipAgainstPlane(polygon, [](Vector4 const& p) { return p.w - p.y; });     // Top: y <= w
+		}
+
+		// Guard-band check: are all vertices within a generous multiple of the viewport?
+		// If not, fall back to full 6-plane clip for x/y.
+		float inline constexpr GUARD_BAND_MULTIPLIER{ 2.f };
+
+		[[nodiscard]] inline bool IsInsideGuardBand(std::vector<Vertex_Out> const& polygon) noexcept
+		{
+			for (auto const& v : polygon)
+			{
+				float const guardW{ GUARD_BAND_MULTIPLIER * std::abs(v.position.w) };
+				if (v.position.x < -guardW || v.position.x > guardW ||
+					v.position.y < -guardW || v.position.y > guardW)
+				{
+					return false;
+				}
+			}
+			return true;
 		}
 
 		[[nodiscard]] constexpr float DepthRemap(float v, float min, float max) noexcept

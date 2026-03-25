@@ -243,7 +243,8 @@ namespace mau
 		SDL_Surface* m_pBackBuffer{ nullptr };
 		uint32_t* m_pBackBufferPixels{ nullptr };
 
-		std::vector<float> m_DepthBuffer{};
+		mutable std::vector<float> m_DepthBuffer{};
+		mutable std::vector<Vertex_Out> m_ClipSpaceVertices{}; // Reused per-frame to avoid reallocation
 
 
 		//DirectX
@@ -304,8 +305,11 @@ namespace mau
 
 		//Software
 		void RenderSoftware() const;
-		void VertexTransformationFunction(std::vector<Vector2>& screenSpace, Mesh* mesh) const;
-		void RenderTriangle(Mesh* m, std::vector<Vector2> const& vertices, uint32_t startVertex, bool swapVertex) const;
+		void VertexTransformationFunction(Mesh const* mesh, std::vector<Vertex_Out>& clipSpaceVertices) const;
+		void RenderTriangle(Mesh const* m, std::vector<Vertex_Out> const& clipSpaceVertices, uint32_t startVertex, bool swapVertex) const;
+		void RasterizeTriangle(Mesh const* m,
+			Vector2 const& v0Screen, Vector2 const& v1Screen, Vector2 const& v2Screen,
+			Vertex_Out const& v0, Vertex_Out const& v1, Vertex_Out const& v2) const;
 
 		[[nodiscard]] ColorRGB PixelShading(const Mesh* m, const Vertex_Out& v, const Vector3& viewDir) const;
 	};
