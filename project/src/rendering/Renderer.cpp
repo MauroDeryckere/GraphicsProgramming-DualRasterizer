@@ -489,7 +489,7 @@ namespace mau {
 					pixelToShade.position = { static_cast<float>(px), static_cast<float>(py), interpolatedDepth, interpolatedDepth };
 
 					Vector3 const viewDir{ (m->GetWorldMatrix().TransformPoint(
-						weight0 * pos0World + weight1 * pos1World + weight2 * pos2World) - m_Camera.origin).Normalized() };
+						interpolatedW * (weight0 * pos0World * invW0 + weight1 * pos1World * invW1 + weight2 * pos2World * invW2)) - m_Camera.origin).Normalized() };
 
 					pixelToShade.texcoord = interpolatedW * (weight0 * uv0 * invW0 + weight1 * uv1 * invW1 + weight2 * uv2 * invW2);
 					pixelToShade.normal = Vector3{ interpolatedW * (weight0 * n0 * invW0 + weight1 * n1 * invW1 + weight2 * n2 * invW2) }.Normalized();
