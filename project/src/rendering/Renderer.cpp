@@ -251,12 +251,18 @@ namespace mau {
 		PROFILER_FUNCTION();
 		// Model -> world -> view -> clip space
 		auto const m{ mesh->GetWorldMatrix() * m_Camera.viewMatrix * m_Camera.projectionMatrix };
-
-		clipSpaceVertices.resize(mesh->GetVertices().size());
-
 		auto const& worldMatrix{ mesh->GetWorldMatrix() };
 
-		// Transform vertices to clip space in parallel (perspective divide deferred to after clipping)
+		auto const vertCount{ mesh->GetVertices().size() };
+		clipSpaceVertices.resize(vertCount);
+		m_NdcVertices.resize(vertCount);
+		m_ScreenVertices.resize(vertCount);
+
+		float const halfWidth{ static_cast<float>(m_Width) * 0.5f };
+		float const halfHeight{ static_cast<float>(m_Height) * 0.5f };
+
+		// Transform vertices to clip space + NDC + screen space in parallel
+		auto const* vertData = mesh->GetVertices().data();
 		std::transform(
 			std::execution::par,
 			mesh->GetVertices().begin(), mesh->GetVertices().end(),
@@ -268,6 +274,20 @@ namespace mau {
 				vOut.worldPosition = worldMatrix.TransformPoint(v.position);
 				vOut.normal = worldMatrix.TransformVector(v.normal);
 				vOut.tangent = worldMatrix.TransformVector(v.tangent);
+
+				// Pre-compute NDC + screen space for the common (non-clipped) path
+				auto const idx{ &v - vertData };
+				m_NdcVertices[idx] = vOut;
+				float const invW{ 1.f / vOut.position.w };
+				m_NdcVertices[idx].position.x = vOut.position.x * invW;
+				m_NdcVertices[idx].position.y = vOut.position.y * invW;
+				m_NdcVertices[idx].position.z = vOut.position.z * invW;
+
+				m_ScreenVertices[idx] = {
+					(m_NdcVertices[idx].position.x + 1.f) * halfWidth,
+					(1.f - m_NdcVertices[idx].position.y) * halfHeight
+				};
+
 				return vOut;
 			});
 	}
@@ -291,31 +311,12 @@ namespace mau {
 			return;
 
 		// 2. Trivial accept - all vertices inside all frustum planes, skip clipping
-		bool const needsClipping{ !Utils::IsTriangleInsideFrustum(cv0.position, cv1.position, cv2.position) };
-
-		float const halfWidth{ static_cast<float>(m_Width) * 0.5f };
-		float const halfHeight{ static_cast<float>(m_Height) * 0.5f };
-
-		// Perspective divide + screen conversion for a single vertex (inline helper)
-		auto perspDivide = [halfWidth, halfHeight](Vertex_Out const& clipV, Vertex_Out& ndcOut, Vector2& screenOut)
+		if (Utils::IsTriangleInsideFrustum(cv0.position, cv1.position, cv2.position))
 		{
-			ndcOut = clipV;
-			float const invW{ 1.f / clipV.position.w };
-			ndcOut.position.x = clipV.position.x * invW;
-			ndcOut.position.y = clipV.position.y * invW;
-			ndcOut.position.z = clipV.position.z * invW;
-			screenOut = { (ndcOut.position.x + 1.f) * halfWidth, (1.f - ndcOut.position.y) * halfHeight };
-		};
-
-		if (!needsClipping)
-		{
-			// Trivial accept - fast path, no clipping, all on stack
-			Vertex_Out ndc0, ndc1, ndc2;
-			Vector2 s0, s1, s2;
-			perspDivide(cv0, ndc0, s0);
-			perspDivide(cv1, ndc1, s1);
-			perspDivide(cv2, ndc2, s2);
-			RasterizeTriangle(m, s0, s1, s2, ndc0, ndc1, ndc2);
+			// Fast path - use pre-computed NDC + screen coords, zero extra work
+			RasterizeTriangle(m,
+				m_ScreenVertices[idx1], m_ScreenVertices[idx2], m_ScreenVertices[idx3],
+				m_NdcVertices[idx1], m_NdcVertices[idx2], m_NdcVertices[idx3]);
 			return;
 		}
 
@@ -330,7 +331,6 @@ namespace mau {
 		// 4. Guard-band check - if vertices stay within guard band, skip x/y clipping
 		if (!Utils::IsInsideGuardBand(polygon))
 		{
-			// Full 6-plane clip as fallback
 			polygon.Clear();
 			polygon.Add(cv0); polygon.Add(cv1); polygon.Add(cv2);
 			Utils::ClipTriangleFull(polygon);
@@ -339,12 +339,25 @@ namespace mau {
 				return;
 		}
 
-		// 5 & 6. Perspective divide + fan-triangulate + rasterize (all on stack)
+		// 5 & 6. Perspective divide + fan-triangulate + rasterize (only for clipped verts)
+		float const halfWidth{ static_cast<float>(m_Width) * 0.5f };
+		float const halfHeight{ static_cast<float>(m_Height) * 0.5f };
+
 		Vector2 screenVerts[Utils::MAX_CLIP_VERTS];
 		Vertex_Out ndcVerts[Utils::MAX_CLIP_VERTS];
 
 		for (uint8_t i{ 0 }; i < polygon.count; ++i)
-			perspDivide(polygon.verts[i], ndcVerts[i], screenVerts[i]);
+		{
+			ndcVerts[i] = polygon.verts[i];
+			float const invW{ 1.f / polygon.verts[i].position.w };
+			ndcVerts[i].position.x = polygon.verts[i].position.x * invW;
+			ndcVerts[i].position.y = polygon.verts[i].position.y * invW;
+			ndcVerts[i].position.z = polygon.verts[i].position.z * invW;
+			screenVerts[i] = {
+				(ndcVerts[i].position.x + 1.f) * halfWidth,
+				(1.f - ndcVerts[i].position.y) * halfHeight
+			};
+		}
 
 		for (uint8_t i{ 1 }; i + 1 < polygon.count; ++i)
 		{

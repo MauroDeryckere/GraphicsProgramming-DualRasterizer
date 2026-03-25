@@ -244,7 +244,9 @@ namespace mau
 		uint32_t* m_pBackBufferPixels{ nullptr };
 
 		mutable std::vector<float> m_DepthBuffer{};
-		mutable std::vector<Vertex_Out> m_ClipSpaceVertices{}; // Reused per-frame to avoid reallocation
+		mutable std::vector<Vertex_Out> m_ClipSpaceVertices{};
+		mutable std::vector<Vertex_Out> m_NdcVertices{};     // Post perspective-divide
+		mutable std::vector<Vector2> m_ScreenVertices{};      // Screen-space coordinates
 
 
 		//DirectX
