@@ -310,10 +310,14 @@ namespace mau {
 		if (Utils::IsTriangleOutsideFrustum(cv0.position, cv1.position, cv2.position))
 			return;
 
-		// 2. Trivial accept - all vertices inside all frustum planes, skip clipping
-		if (Utils::IsTriangleInsideFrustum(cv0.position, cv1.position, cv2.position))
+		// 2. Check if near/far clipping is needed (only mandatory clip planes)
+		bool const needsNearFarClip{
+			cv0.position.z < 0 || cv1.position.z < 0 || cv2.position.z < 0 ||
+			cv0.position.z > cv0.position.w || cv1.position.z > cv1.position.w || cv2.position.z > cv2.position.w };
+
+		if (!needsNearFarClip)
 		{
-			// Fast path - use pre-computed NDC + screen coords, zero extra work
+			// Fast path - no clipping needed, use pre-computed data
 			RasterizeTriangle(m,
 				m_ScreenVertices[idx1], m_ScreenVertices[idx2], m_ScreenVertices[idx3],
 				m_NdcVertices[idx1], m_NdcVertices[idx2], m_NdcVertices[idx3]);
