@@ -495,7 +495,7 @@ namespace mau {
 					pixelToShade.position = { static_cast<float>(px), static_cast<float>(py), interpolatedDepth, interpolatedDepth };
 
 					Vector3 const viewDir{ (m->GetWorldMatrix().TransformPoint(
-						interpolatedW * (weight0 * pos0World * invW0 + weight1 * pos1World * invW1 + weight2 * pos2World * invW2)) - m_Camera.origin).Normalized() };
+						weight0 * pos0World + weight1 * pos1World + weight2 * pos2World) - m_Camera.origin).Normalized() };
 
 					pixelToShade.texcoord = interpolatedW * (weight0 * uv0 * invW0 + weight1 * uv1 * invW1 + weight2 * uv2 * invW2);
 					pixelToShade.normal = Vector3{ interpolatedW * (weight0 * n0 * invW0 + weight1 * n1 * invW1 + weight2 * n2 * invW2) }.Normalized();
@@ -521,12 +521,6 @@ namespace mau {
 		float static constexpr SHININESS{ 25.0f };
 		float static constexpr KD{ 7.f };
 
-		// Early out: skip all shading if surface faces away from light
-		if (m_CurrShadingMode != ShadingMode::ObservedArea && Vector3::Dot(v.normal, -LIGHT_DIRECTION) <= 0.f)
-		{
-			return AMBIENT_COLOR;
-		}
-
 		// Normal mapping (manual 3x3 TBN transform - avoids 4x4 Matrix overhead)
 		Vector3 sampledNormal{ v.normal };
 		if (m_UseNormalMapping)
@@ -545,7 +539,14 @@ namespace mau {
 			sampledNormal.Normalize();
 		}
 
+		// Early out using the normal-mapped normal (matches HLSL behavior)
 		float const observedArea{ std::clamp(Utils::CalculateObservedArea(sampledNormal, LIGHT_DIRECTION), 0.f, 1.f) };
+
+		if (m_CurrShadingMode != ShadingMode::ObservedArea && observedArea <= 0.f)
+		{
+			return AMBIENT_COLOR;
+		}
+
 		ColorRGB result{ };
 		switch (m_CurrShadingMode)
 		{
@@ -561,13 +562,16 @@ namespace mau {
 		}
 		case ShadingMode::Specular:
 		{
-			result = observedArea * m_pVehicleSpecularTexture->Sample(v.texcoord).r * BRDF::Phong(1.f, SHININESS * m_pVehicleGlossinessTexture->Sample(v.texcoord).r, LIGHT_DIRECTION, viewDir, sampledNormal);
+			// Specular is not multiplied by observedArea (matches HLSL shader)
+			// Use full specular color (not just .r) and glossiness .b channel to match HLSL
+			result = m_pVehicleSpecularTexture->Sample(v.texcoord) * BRDF::Phong(1.f, SHININESS * m_pVehicleGlossinessTexture->Sample(v.texcoord).b, LIGHT_DIRECTION, viewDir, sampledNormal);
 			break;
 		}
 		case ShadingMode::Combined:
 		{
+			// observedArea only applies to diffuse, not specular (matches HLSL shader)
 			auto const lambert{ BRDF::Lambert(KD, m_pVehicleDiffuseTexture->Sample(v.texcoord)) };
-			ColorRGB const phong = m_pVehicleSpecularTexture->Sample(v.texcoord).r * BRDF::Phong(1.f, SHININESS * m_pVehicleGlossinessTexture->Sample(v.texcoord).r, LIGHT_DIRECTION, viewDir, sampledNormal);
+			ColorRGB const phong = m_pVehicleSpecularTexture->Sample(v.texcoord) * BRDF::Phong(1.f, SHININESS * m_pVehicleGlossinessTexture->Sample(v.texcoord).b, LIGHT_DIRECTION, viewDir, sampledNormal);
 			result = observedArea * lambert + phong;
 			break;
 		}
