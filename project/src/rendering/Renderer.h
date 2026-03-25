@@ -311,7 +311,8 @@ namespace mau
 		void RenderTriangle(Mesh const* m, std::vector<Vertex_Out> const& clipSpaceVertices, uint32_t startVertex, bool swapVertex) const;
 		void RasterizeTriangle(Mesh const* m,
 			Vector2 const& v0Screen, Vector2 const& v1Screen, Vector2 const& v2Screen,
-			Vertex_Out const& v0, Vertex_Out const& v1, Vertex_Out const& v2) const;
+			Vertex_Out const& v0, Vertex_Out const& v1, Vertex_Out const& v2,
+			Vector3 const& pos0World, Vector3 const& pos1World, Vector3 const& pos2World) const;
 
 		[[nodiscard]] ColorRGB PixelShading(const Mesh* m, const Vertex_Out& v, const Vector3& viewDir) const;
 	};

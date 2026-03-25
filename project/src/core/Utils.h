@@ -89,7 +89,6 @@ namespace mau
 			Vertex_Out result{};
 			float const oneMinusT{ 1.f - t };
 			result.position = a.position * oneMinusT + b.position * t;
-			result.worldPosition = a.worldPosition * oneMinusT + b.worldPosition * t;
 			result.texcoord = a.texcoord * oneMinusT + b.texcoord * t;
 			result.normal = a.normal * oneMinusT + b.normal * t;
 			result.tangent = a.tangent * oneMinusT + b.tangent * t;

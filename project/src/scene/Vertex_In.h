@@ -16,8 +16,7 @@ namespace mau
 
 	struct Vertex_Out
 	{
-		Vector4 position{};     // Clip space (pre-divide) or NDC (post-divide)
-		Vector3 worldPosition{};// World-space position for view direction calculation
+		Vector4 position{};
 		Vector2 texcoord{};
 		Vector3 normal{};
 		Vector3 tangent{};

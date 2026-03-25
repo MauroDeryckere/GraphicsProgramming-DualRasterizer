@@ -271,7 +271,6 @@ namespace mau {
 				Vertex_Out vOut{};
 				vOut.texcoord = v.texcoord;
 				vOut.position = m.TransformPoint(v.position.ToPoint4());
-				vOut.worldPosition = worldMatrix.TransformPoint(v.position);
 				vOut.normal = worldMatrix.TransformVector(v.normal);
 				vOut.tangent = worldMatrix.TransformVector(v.tangent);
 
@@ -318,9 +317,11 @@ namespace mau {
 		if (!needsNearFarClip)
 		{
 			// Fast path - no clipping needed, use pre-computed data
+			auto const& verts = m->GetVertices();
 			RasterizeTriangle(m,
 				m_ScreenVertices[idx1], m_ScreenVertices[idx2], m_ScreenVertices[idx3],
-				m_NdcVertices[idx1], m_NdcVertices[idx2], m_NdcVertices[idx3]);
+				m_NdcVertices[idx1], m_NdcVertices[idx2], m_NdcVertices[idx3],
+				verts[idx1].position, verts[idx2].position, verts[idx3].position);
 			return;
 		}
 
@@ -347,6 +348,13 @@ namespace mau {
 		float const halfWidth{ static_cast<float>(m_Width) * 0.5f };
 		float const halfHeight{ static_cast<float>(m_Height) * 0.5f };
 
+		// Use original triangle's model-space positions for view direction in clipped triangles
+		// (view direction varies slowly across a triangle, so this approximation is fine)
+		auto const& verts = m->GetVertices();
+		Vector3 const& pos0 = verts[idx1].position;
+		Vector3 const& pos1 = verts[idx2].position;
+		Vector3 const& pos2 = verts[idx3].position;
+
 		Vector2 screenVerts[Utils::MAX_CLIP_VERTS];
 		Vertex_Out ndcVerts[Utils::MAX_CLIP_VERTS];
 
@@ -367,13 +375,15 @@ namespace mau {
 		{
 			RasterizeTriangle(m,
 				screenVerts[0], screenVerts[i], screenVerts[i + 1],
-				ndcVerts[0], ndcVerts[i], ndcVerts[i + 1]);
+				ndcVerts[0], ndcVerts[i], ndcVerts[i + 1],
+				pos0, pos1, pos2);
 		}
 	}
 
 	void Renderer::RasterizeTriangle(Mesh const* m,
 		Vector2 const& vert0, Vector2 const& vert1, Vector2 const& vert2,
-		Vertex_Out const& v0, Vertex_Out const& v1, Vertex_Out const& v2) const
+		Vertex_Out const& v0, Vertex_Out const& v1, Vertex_Out const& v2,
+		Vector3 const& pos0World, Vector3 const& pos1World, Vector3 const& pos2World) const
 	{
 		float const totalTriangleArea{ (vert1.x - vert0.x) * (vert2.y - vert0.y) - (vert1.y - vert0.y) * (vert2.x - vert0.x) };
 
@@ -478,12 +488,8 @@ namespace mau {
 					Vertex_Out pixelToShade{};
 					pixelToShade.position = { static_cast<float>(px), static_cast<float>(py), interpolatedDepth, interpolatedDepth };
 
-					// Perspective-correct view direction from interpolated world positions
-					Vector3 const worldPos{ interpolatedW * (
-						weight0 * v0.worldPosition * invW0 +
-						weight1 * v1.worldPosition * invW1 +
-						weight2 * v2.worldPosition * invW2) };
-					Vector3 const viewDir{ (worldPos - m_Camera.origin).Normalized() };
+					Vector3 const viewDir{ (m->GetWorldMatrix().TransformPoint(
+						weight0 * pos0World + weight1 * pos1World + weight2 * pos2World) - m_Camera.origin).Normalized() };
 
 					pixelToShade.texcoord = interpolatedW * (weight0 * uv0 * invW0 + weight1 * uv1 * invW1 + weight2 * uv2 * invW2);
 					pixelToShade.normal = Vector3{ interpolatedW * (weight0 * n0 * invW0 + weight1 * n1 * invW1 + weight2 * n2 * invW2) }.Normalized();
