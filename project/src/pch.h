@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <sstream>
 #include <memory>
+#include <cassert>
 
 // SDL Headers
 #pragma warning(push)

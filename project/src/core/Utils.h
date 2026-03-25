@@ -79,7 +79,7 @@ namespace mau
 			Vertex_Out verts[MAX_CLIP_VERTS];
 			uint8_t count{ 0 };
 
-			void Add(Vertex_Out const& v) noexcept { verts[count++] = v; }
+			void Add(Vertex_Out const& v) noexcept { assert(count < MAX_CLIP_VERTS); verts[count++] = v; }
 			void Clear() noexcept { count = 0; }
 		};
 
@@ -168,6 +168,67 @@ namespace mau
 				}
 			}
 			return true;
+		}
+
+		// Compute model-space positions for clipped vertices by recovering barycentric
+		// coords from their clip-space positions relative to the original triangle.
+		inline void InterpolateClipPositions(
+			ClipPolygon const& polygon,
+			Vertex_Out const& origCV0, Vertex_Out const& origCV1, Vertex_Out const& origCV2,
+			Vector3 const& pos0, Vector3 const& pos1, Vector3 const& pos2,
+			Vector3* outPositions) noexcept
+		{
+			// Use x,y,z of clip-space to solve for barycentrics via Cramer's rule
+			// p = u * v0 + v * v1 + (1-u-v) * v2
+			// p - v2 = u * (v0 - v2) + v * (v1 - v2)
+			Vector3 const d0{
+				origCV0.position.x - origCV2.position.x,
+				origCV0.position.y - origCV2.position.y,
+				origCV0.position.z - origCV2.position.z };
+			Vector3 const d1{
+				origCV1.position.x - origCV2.position.x,
+				origCV1.position.y - origCV2.position.y,
+				origCV1.position.z - origCV2.position.z };
+
+			// Use the two components with the largest cross product for numerical stability
+			float const cx{ d0.y * d1.z - d0.z * d1.y };
+			float const cy{ d0.z * d1.x - d0.x * d1.z };
+			float const cz{ d0.x * d1.y - d0.y * d1.x };
+
+			float const acx{ std::abs(cx) };
+			float const acy{ std::abs(cy) };
+			float const acz{ std::abs(cz) };
+
+			for (uint8_t i{ 0 }; i < polygon.count; ++i)
+			{
+				Vector3 const dp{
+					polygon.verts[i].position.x - origCV2.position.x,
+					polygon.verts[i].position.y - origCV2.position.y,
+					polygon.verts[i].position.z - origCV2.position.z };
+
+				float u, v;
+				if (acx >= acy && acx >= acz)
+				{
+					// Use y,z components
+					u = (dp.y * d1.z - dp.z * d1.y) / cx;
+					v = (d0.y * dp.z - d0.z * dp.y) / cx;
+				}
+				else if (acy >= acz)
+				{
+					// Use z,x components
+					u = (dp.z * d1.x - dp.x * d1.z) / cy;
+					v = (d0.z * dp.x - d0.x * dp.z) / cy;
+				}
+				else
+				{
+					// Use x,y components
+					u = (dp.x * d1.y - dp.y * d1.x) / cz;
+					v = (d0.x * dp.y - d0.y * dp.x) / cz;
+				}
+
+				float const w{ 1.f - u - v };
+				outPositions[i] = pos0 * u + pos1 * v + pos2 * w;
+			}
 		}
 
 		[[nodiscard]] constexpr float DepthRemap(float v, float min, float max) noexcept

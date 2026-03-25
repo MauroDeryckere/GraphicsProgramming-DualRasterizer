@@ -348,12 +348,18 @@ namespace mau {
 		float const halfWidth{ static_cast<float>(m_Width) * 0.5f };
 		float const halfHeight{ static_cast<float>(m_Height) * 0.5f };
 
-		// Use original triangle's model-space positions for view direction in clipped triangles
-		// (view direction varies slowly across a triangle, so this approximation is fine)
+		// Interpolate model-space positions for clipped vertices using the same
+		// barycentric approach as the clipper uses for other attributes.
+		// We store them in a parallel array so Vertex_Out stays small.
 		auto const& verts = m->GetVertices();
-		Vector3 const& pos0 = verts[idx1].position;
-		Vector3 const& pos1 = verts[idx2].position;
-		Vector3 const& pos2 = verts[idx3].position;
+		Vector3 const& origPos0 = verts[idx1].position;
+		Vector3 const& origPos1 = verts[idx2].position;
+		Vector3 const& origPos2 = verts[idx3].position;
+
+		// Compute model-space positions for each clipped vertex by finding its
+		// barycentric coords relative to the original clip-space triangle
+		Vector3 clipPositions[Utils::MAX_CLIP_VERTS];
+		Utils::InterpolateClipPositions(polygon, cv0, cv1, cv2, origPos0, origPos1, origPos2, clipPositions);
 
 		Vector2 screenVerts[Utils::MAX_CLIP_VERTS];
 		Vertex_Out ndcVerts[Utils::MAX_CLIP_VERTS];
@@ -376,7 +382,7 @@ namespace mau {
 			RasterizeTriangle(m,
 				screenVerts[0], screenVerts[i], screenVerts[i + 1],
 				ndcVerts[0], ndcVerts[i], ndcVerts[i + 1],
-				pos0, pos1, pos2);
+				clipPositions[0], clipPositions[i], clipPositions[i + 1]);
 		}
 	}
 
